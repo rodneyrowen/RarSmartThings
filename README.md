@@ -1,2 +1,2 @@
 # RarSmartThings
-Rodney's Smart Things programs
+Rodney's Smartthings programs
