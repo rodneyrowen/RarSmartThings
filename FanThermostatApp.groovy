@@ -132,7 +132,7 @@ def initialize() {
     //def thermostat = getChildDevice(deviceID)
     //if (!thermostat) {
     //	log.info "create Fan Thermostat"
-    //    thermostat = addChildDevice("rar", "FanThermostat", deviceID, getHubID(), [name: "Fan Thermostat", label: "Fan Thermostat", completedSetup: true])
+    //    thermostat = addChildDevice("rodneyrowen", "FanThermostat", deviceID, getHubID(), [name: "Fan Thermostat", label: "Fan Thermostat", completedSetup: true])
     //} else {
     //	log.info "Fan Thermostat exists"
     //}

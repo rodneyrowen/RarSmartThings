@@ -153,7 +153,7 @@ def zones(){
         ){
              if (installed){
             	section {
-                    app(name: "childZones", appName: "Tstat Zone", namespace: "rar", title: "Create Zone...", multiple: true)
+                    app(name: "childZones", appName: "Tstat Zone", namespace: "rodneyrowen", title: "Create Zone...", multiple: true)
             	}
 				section (getVersionInfo()) { }
             } else {
@@ -195,7 +195,7 @@ def initialize() {
     def tstatThermostat = getChildDevice(deviceID)
     if (!tstatThermostat) {
     	log.info "create Tstat Theromstat"
-        tstatThermostat = addChildDevice("rar", "Tstat Thermostat", deviceID, getHubID(), [name: zName, label: zName, completedSetup: true])
+        tstatThermostat = addChildDevice("rodneyrowen", "Tstat Thermostat", deviceID, getHubID(), [name: zName, label: zName, completedSetup: true])
     } else {
     	log.info "Tstat Theromstat exists"
     }

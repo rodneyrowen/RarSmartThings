@@ -67,7 +67,7 @@ def initialize() {
     def zoneTile = getChildDevice(deviceID)
     if (!zoneTile) {
     	log.info "create Tstat Tile ${zName}"
-        zoneTile = addChildDevice("rar", "Tstat Zone Tile", deviceID, getHubID(), [name: zName, label: zName, completedSetup: true])
+        zoneTile = addChildDevice("rodneyrowen", "Tstat Zone Tile", deviceID, getHubID(), [name: zName, label: zName, completedSetup: true])
     } else {
     	log.info "Tstat Tile ${zName} exists"
     }
