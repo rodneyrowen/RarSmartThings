@@ -37,6 +37,8 @@ def updated() {
 }
 
 def initialize() {
+    def name = app.getLabel() 
+    app.updateLabel("Schedule-${name}") 
 }
 
 def Integer getHeatingSetpoint() {

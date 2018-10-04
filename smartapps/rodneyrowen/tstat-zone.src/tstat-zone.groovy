@@ -62,7 +62,7 @@ def initialize() {
 
     subscribe(motionSensors, "motion.inactive", inactiveHandler)
     subscribe(motionSensors, "motion.active", activeHandler)
-    app.updateLabel("${settings.zoneName} Zone Controller") 
+    app.updateLabel("Zone-${settings.zoneName}") 
     def deviceID = "${app.id}"
     def zName = "Tstat-${settings.zoneName}"
     def zoneTile = getChildDevice(deviceID)
