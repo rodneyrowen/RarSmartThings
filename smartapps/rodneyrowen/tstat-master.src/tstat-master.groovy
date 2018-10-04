@@ -134,7 +134,7 @@ def schedules(){
             }
             if (installed){
             	section(){
-                	paragraph("dummy scheudules for now.")
+                    app(name: "childSchedules", appName: "Tstat Schedule", namespace: "rodneyrowen", title: "Create Schedules...", multiple: true)
                 }
             } else {
             	section(){
@@ -216,28 +216,28 @@ def modeHandler(evt) {
 	def tstatThermostat = getChildDevice("${app.id}")
     def mode = tstatThermostat.currentValue('thermostatMode')
     log.trace "Got Mode ${mode}"
-    doProcessing()
+    evaluateState()
 }
 
 def setpointHandler(evt) {
 	def tstatThermostat = getChildDevice("${app.id}")
     def setpoint = tstatThermostat.currentValue('thermostatSetpoint')
     log.trace "Setpoint Changed ${setpoint}"
-    doProcessing()
+    evaluateState()
 }
 
 def coolingSetpointHandler(evt) {
 	def tstatThermostat = getChildDevice("${app.id}")
     def setpoint = tstatThermostat.currentValue('coolingSetpoint')
     log.trace "Cooling Setpoint Changed ${setpoint}"
-    doProcessing()
+    evaluateState()
 }
 
 def heatingSetpointHandler(evt) {
 	def tstatThermostat = getChildDevice("${app.id}")
     def setpoint = tstatThermostat.currentValue('heatingSetpoint')
     log.trace "Heating Setpoint Changed ${setpoint}"
-    doProcessing()
+    evaluateState()
 }
 
 private double getTemparture() {
@@ -256,7 +256,20 @@ private double getTemparture() {
 
 def poll() {
 	// Periodic poller since event listening does not seem to be working
+    evaluateState()
+}
+
+private evaluateState() {
+    evaluateSchedules()
     doProcessing()
+}
+
+private evaluateSchedules() {
+    def schedules = settings.childSchedules
+    log.debug "$schedules.size() child scheules installed"
+    schedules.each { schedule ->
+        log.debug "Child app id: $schedule.id"
+    }    
 }
 
 private doProcessing() {
