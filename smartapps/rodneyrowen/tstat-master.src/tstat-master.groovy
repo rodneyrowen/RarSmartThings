@@ -260,16 +260,14 @@ def poll() {
 }
 
 private evaluateState() {
-    evaluateSchedules()
+    evaluateChildren()
     doProcessing()
 }
 
-private evaluateSchedules() {
-    def schedules = settings.childSchedules
-    log.debug "$schedules.size() child scheules installed"
-    schedules.each { schedule ->
-        log.debug "Child app id: $schedule.id"
-    }    
+private evaluateChildren() {
+    childApps.each {child ->
+            log.info "Installed Children: ${child.label}"
+    }
 }
 
 private doProcessing() {
