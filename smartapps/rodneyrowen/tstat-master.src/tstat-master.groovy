@@ -206,6 +206,9 @@ def initialize() {
     subscribe(tstatThermostat, "coolingSetpoint", coolingSetpointHandler)
     subscribe(tstatThermostat, "heatingSetpoint", heatingSetpointHandler)
     subscribe(tstatThermostat, "thermostatSetpoint", setpointHandler)
+
+    runEvery5Minutes(poll)
+
     log.debug "Subscribed to devices:"
 }
 
@@ -213,24 +216,62 @@ def modeHandler(evt) {
 	def tstatThermostat = getChildDevice("${app.id}")
     def mode = tstatThermostat.currentValue('thermostatMode')
     log.trace "Got Mode ${mode}"
+    doProcessing()
 }
 
 def setpointHandler(evt) {
 	def tstatThermostat = getChildDevice("${app.id}")
     def setpoint = tstatThermostat.currentValue('thermostatSetpoint')
     log.trace "Setpoint Changed ${setpoint}"
+    doProcessing()
 }
 
 def coolingSetpointHandler(evt) {
 	def tstatThermostat = getChildDevice("${app.id}")
     def setpoint = tstatThermostat.currentValue('coolingSetpoint')
     log.trace "Cooling Setpoint Changed ${setpoint}"
+    doProcessing()
 }
 
 def heatingSetpointHandler(evt) {
 	def tstatThermostat = getChildDevice("${app.id}")
     def setpoint = tstatThermostat.currentValue('heatingSetpoint')
     log.trace "Heating Setpoint Changed ${setpoint}"
+    doProcessing()
+}
+
+private double getTemparture() {
+    def sum     = 0
+    def count   = 0
+    def average = 0
+
+    for (sensor in settings.inTemp) {
+        count += 1
+        sum   += sensor.currentTemperature
+    }
+
+    average = sum/count
+    return average
+}
+
+def poll() {
+	// Periodic poller since event listening does not seem to be working
+    doProcessing()
+}
+
+private doProcessing() {
+	def tstatThermostat = getChildDevice("${app.id}")
+    // Only to auto processing in auto mode so check this first
+    def mode = tstatThermostat.currentValue('thermostatFanMode')
+    def setpoint = tstatThermostat.currentValue('thermostatSetpoint')
+    def temperature = getTemparture()
+    tstatThermostat.setTemperature(temperature)
+
+    // Read the inputs to the processing
+    def houseMode = houseThermostat.currentValue('thermostatMode')
+    def houseTemp = houseThermostat.currentValue('temperature')
+
+    log.trace "Evalutate: ${mode} temp ${temperature} house ${houseTemp} setpoint ${setpoint} windows ${openWindow}"
 }
 
 def getVersionInfo(){
