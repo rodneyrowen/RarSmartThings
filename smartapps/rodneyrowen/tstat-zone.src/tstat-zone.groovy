@@ -31,6 +31,7 @@ preferences {
 	page(name: "main")
     page(name: "triggers", nextPage	: "main")
 }
+
 def installed() {
 }
 
@@ -53,7 +54,7 @@ def getHubID(){
 }
 
 def initialize() {
-    state.vChild = "1.0.0"
+    state.vChild = "1.0.1"
     parent.updateVer(state.vChild)
     state.nextRunTime = 0
     state.zoneTriggerActive = false
@@ -72,6 +73,14 @@ def initialize() {
     	log.info "Tstat Tile ${zName} exists"
     }
     zoneTile.inactive()
+
+	state.temperature = 0
+    runEvery5Minutes(poll)
+}
+
+def poll() {
+	// Periodic poller since event listening does not seem to be working
+    temperatureHandler()
 }
 
 def temperatureHandler(evt) {
@@ -85,12 +94,19 @@ def temperatureHandler(evt) {
     }
 
     average = sum/count
+	state.temperature = average
+
     log.debug "average: $average"
 
     def zoneTile = getChildDevice("${app.id}")
 	if (zoneTile) {
+	    log.debug "Set Tile Temp to: $average"
 		zoneTile.setTemperature(average)
    	}
+}
+
+def getTemperature() {
+	return state.temperature
 }
 
 def activityTimeoutHandler(evtTime,device){
