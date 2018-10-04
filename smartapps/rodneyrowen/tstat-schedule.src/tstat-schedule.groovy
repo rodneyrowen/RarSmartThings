@@ -22,9 +22,20 @@ definition(
 
 preferences {
     section("Set points") {
-        input "coolingSetpoint", "number", title: "Cooling Setpoint"
-        input "heatingSepoint", "number", title: "Heating Setpoint"
+        input "coolingSetpoint", "number", title: "Cooling Setpoint", required: true
+        input "heatingSepoint", "number", title: "Heating Setpoint", required: true
     }
+    section("Priority") {
+        input(name: "priority", type: "enum", title: "Priority", required: true, options: ["0-Inactive","1-Low","2-Medium","3-High"])
+    }
+    section("Between what times?") {
+        input "fromTime", "time", title: "From"
+        input "toTime", "time", title: "To"
+    }
+    section("On Which Days") {
+        input "days", "enum", title: "Select Days of the Week", multiple: true, options: ["Monday": "Monday", "Tuesday": "Tuesday", "Wednesday": "Wednesday", "Thursday": "Thursday", "Friday": "Friday"]
+    }
+
 }
 
 def installed() {
@@ -49,4 +60,23 @@ def Integer getHeatingSetpoint() {
 def Integer getCoolingSetpoint() {
     def temp = settings.coolingSepoint
     return temp ? temp.getIntegerValue() : 60
+}
+
+def Integer isActive() {
+    def currMode = location.mode
+    
+    def df = new java.text.SimpleDateFormat("EEEE")
+    // Ensure the new date object is set to local time zone
+    df.setTimeZone(location.timeZone)
+    def day = df.format(new Date())
+    //Does the preference input Days, i.e., days-of-week, contain today?
+    def dayCheck = days.contains(day)
+    if (dayCheck) {
+        def between = timeOfDayIsBetween(fromTime, toTime, new Date(), location.timeZone)
+        if (between) {
+            //roomLight.on()
+        } else {
+            //roomLight.off()
+        }
+    }
 }
