@@ -133,8 +133,8 @@ def schedules(){
                 input "heatingTemp", "number", title: "Heating Setpoint"
             }
             if (installed){
-            	section(){
-                    app(name: "childSchedules", appName: "Tstat Schedule", namespace: "rodneyrowen", title: "Create Schedules...", multiple: true)
+            	section("Schedules"){
+                    app(name: "childSchedules", appName: "Tstat Schedule", namespace: "rodneyrowen", title: "Create New Schedule...", multiple: true)
                 }
             } else {
             	section(){
@@ -152,8 +152,8 @@ def zones(){
         ,uninstall  : true
         ){
              if (installed){
-            	section {
-                    app(name: "childZones", appName: "Tstat Zone", namespace: "rodneyrowen", title: "Create Zone...", multiple: true)
+            	section("Tstat Zones") {
+                    app(name: "childZones", appName: "Tstat Zone", namespace: "rodneyrowen", title: "Create New Zone...", multiple: true)
             	}
 				section (getVersionInfo()) { }
             } else {

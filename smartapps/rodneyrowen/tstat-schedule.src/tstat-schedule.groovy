@@ -21,9 +21,9 @@ definition(
     iconX2Url: "https://s3.amazonaws.com/smartapp-icons/Convenience/Cat-Convenience@2x.png")
 
 preferences {
-    page(name: "Schedule", title: "Set Schedule", uninstall: true) {
+    page(name: "Schedule", title: "Set Schedule", install: true, uninstall: true) {
         section("Schedule Name") {
-            input(name : "scheduleName" ,type : "text", title : "Name of this Schedule", required : true)
+            input(name: "scheduleName", type: "text", title: "Name of this Schedule", required: true)
         }
         section("Set points") {
             input "coolingSetpoint", "number", title: "Cooling Setpoint", required: true
@@ -33,11 +33,11 @@ preferences {
             input(name: "priority", type: "enum", title: "Priority", required: true, options: ["Inactive","Low","Medium","High"])
         }
         section("Between what times?") {
-            input "fromTime", "time", title: "From"
-            input "toTime", "time", title: "To"
+            input "fromTime", "time", title: "From", required: false
+            input "toTime", "time", title: "To", required: false
         }
         section("On Which Days") {
-            input "days", "enum", title: "Select Days of the Week", multiple: true, options: ["Monday": "Monday", "Tuesday": "Tuesday", "Wednesday": "Wednesday", "Thursday": "Thursday", "Friday": "Friday"]
+            input "days", "enum", title: "Select Days of the Week", required: false, multiple: true, options: ["Monday": "Monday", "Tuesday": "Tuesday", "Wednesday": "Wednesday", "Thursday": "Thursday", "Friday": "Friday"]
         }
         section("Select Modes") {
             mode title: "Set for specific mode(s)", required: false
@@ -55,7 +55,7 @@ def updated() {
 }
 
 def initialize() {
-    def name = setting.scheduleName 
+    def name = settings.scheduleName 
     app.updateLabel("Schedule-${name}") 
 }
 
