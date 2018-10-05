@@ -32,15 +32,15 @@ preferences {
         section("Priority") {
             input(name: "priority", type: "enum", title: "Priority", required: true, options: ["Inactive","Low","Medium","High"])
         }
-        section("Between what times?") {
-            input "fromTime", "time", title: "From", required: false
-            input "toTime", "time", title: "To", required: false
+        section("Apply Settings When...") {
+            mode title: "Set for specific mode(s)", required: false
         }
         section("On Which Days") {
             input "days", "enum", title: "Select Days of the Week", required: false, multiple: true, options: ["Monday": "Monday", "Tuesday": "Tuesday", "Wednesday": "Wednesday", "Thursday": "Thursday", "Friday": "Friday"]
         }
-        section("Select Modes") {
-            mode title: "Set for specific mode(s)", required: false
+        section("Between what times?") {
+            input "fromTime", "time", title: "From", required: false
+            input "toTime", "time", title: "To", required: false
         }
     }
 }

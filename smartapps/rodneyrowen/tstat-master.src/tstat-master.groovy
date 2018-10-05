@@ -266,7 +266,20 @@ private evaluateState() {
 
 private evaluateChildren() {
     childApps.each {child ->
-            log.info "Installed Children: ${child.label}"
+        def (type, value) = child.label.split('-')
+        if (type == "Schedule") {
+            log.info "evalute Schedule type for: ${value}"
+            def state = child.isActive()
+            log.info "Schedule returned ${state}"
+
+        } else if (type == "Zone") {
+            log.info "evalute Zone for: ${value}"
+            def temp = child.getTemperature()
+            log.info "Zone returned ${temp}"
+        } else {
+            log.info "Unknown Child type: ${child.label}"
+            log.info "Got type: ${type}, value = ${value}"
+        }
     }
 }
 
