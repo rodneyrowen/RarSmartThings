@@ -21,21 +21,28 @@ definition(
     iconX2Url: "https://s3.amazonaws.com/smartapp-icons/Convenience/Cat-Convenience@2x.png")
 
 preferences {
-    section("Set points") {
-        input "coolingSetpoint", "number", title: "Cooling Setpoint", required: true
-        input "heatingSepoint", "number", title: "Heating Setpoint", required: true
+    page(name: "Schedule", title: "Set Schedule", uninstall: true) {
+        section("Schedule Name") {
+            input(name : "scheduleName" ,type : "text", title : "Name of this Schedule", required : true)
+        }
+        section("Set points") {
+            input "coolingSetpoint", "number", title: "Cooling Setpoint", required: true
+            input "heatingSepoint", "number", title: "Heating Setpoint", required: true
+        }
+        section("Priority") {
+            input(name: "priority", type: "enum", title: "Priority", required: true, options: ["Inactive","Low","Medium","High"])
+        }
+        section("Between what times?") {
+            input "fromTime", "time", title: "From"
+            input "toTime", "time", title: "To"
+        }
+        section("On Which Days") {
+            input "days", "enum", title: "Select Days of the Week", multiple: true, options: ["Monday": "Monday", "Tuesday": "Tuesday", "Wednesday": "Wednesday", "Thursday": "Thursday", "Friday": "Friday"]
+        }
+        section("Select Modes") {
+            mode title: "Set for specific mode(s)", required: false
+        }
     }
-    section("Priority") {
-        input(name: "priority", type: "enum", title: "Priority", required: true, options: ["0-Inactive","1-Low","2-Medium","3-High"])
-    }
-    section("Between what times?") {
-        input "fromTime", "time", title: "From"
-        input "toTime", "time", title: "To"
-    }
-    section("On Which Days") {
-        input "days", "enum", title: "Select Days of the Week", multiple: true, options: ["Monday": "Monday", "Tuesday": "Tuesday", "Wednesday": "Wednesday", "Thursday": "Thursday", "Friday": "Friday"]
-    }
-
 }
 
 def installed() {
@@ -48,7 +55,7 @@ def updated() {
 }
 
 def initialize() {
-    def name = app.getLabel() 
+    def name = setting.scheduleName 
     app.updateLabel("Schedule-${name}") 
 }
 
@@ -62,21 +69,41 @@ def Integer getCoolingSetpoint() {
     return temp ? temp.getIntegerValue() : 60
 }
 
-def Integer isActive() {
-    def currMode = location.mode
-    
-    def df = new java.text.SimpleDateFormat("EEEE")
-    // Ensure the new date object is set to local time zone
-    df.setTimeZone(location.timeZone)
-    def day = df.format(new Date())
-    //Does the preference input Days, i.e., days-of-week, contain today?
-    def dayCheck = days.contains(day)
-    if (dayCheck) {
-        def between = timeOfDayIsBetween(fromTime, toTime, new Date(), location.timeZone)
-        if (between) {
-            //roomLight.on()
-        } else {
-            //roomLight.off()
-        }
+def Integer convertPriority(strText) {
+    def curPriority = settings.priority
+    def curValue = 0
+    if (curPriority == "High") {
+        curValue = 3
+    } else if (curPriority == "Medium") {
+        curValue = 2
+    } else if (curPriority == "Low") {
+        curValue = 1
     }
+
+    return curValue
+}
+
+def Integer isActive() {
+    log.trace "IsActive: ${location.mode} Modes: ${settings.modes}"
+    def state = 0
+    if (modes) {
+        if (modes.contains(location.mode)) {
+            state = convertPriority(settings.modes)
+        }
+    }  
+    //def df = new java.text.SimpleDateFormat("EEEE")
+    // Ensure the new date object is set to local time zone
+    //df.setTimeZone(location.timeZone)
+    //def day = df.format(new Date())
+    //Does the preference input Days, i.e., days-of-week, contain today?
+    //def dayCheck = days.contains(day)
+    //if (dayCheck) {
+        //def between = timeOfDayIsBetween(fromTime, toTime, new Date(), location.timeZone)
+        //if (between) {
+            //roomLight.on()
+       // } else {
+            //roomLight.off()
+       // }
+   // }
+   return state
 }
