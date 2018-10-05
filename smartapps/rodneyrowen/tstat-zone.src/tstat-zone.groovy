@@ -106,14 +106,20 @@ def temperatureHandler(evt) {
     def count   = 0
     def average = 0
 
-    for (sensor in settings.tempSensors) {
-        count += 1
-        sum   += sensor.currentTemperature
+	if (settings.tempSensors) {
+
+        for (sensor in settings.tempSensors) {
+            count += 1
+            sum   += sensor.currentTemperature
+        }
+
+        average = sum/count
+    } else {
+	    log.debug "No temp Sensors available set average to 60"
+    	average = 60
     }
-
-    average = sum/count
-	state.temperature = average
-
+    
+    state.temperature = average
     log.debug "average: $average"
 
     def zoneTile = getChildDevice("${app.id}")
