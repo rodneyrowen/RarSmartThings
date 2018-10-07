@@ -209,6 +209,9 @@ def initialize() {
 
     runEvery5Minutes(poll)
 
+    // save defaults to state
+    changeSchedule("Default", settings.coolingTemp, settings.heatingTemp) 
+
     log.debug "Subscribed to devices:"
 }
 
@@ -293,6 +296,25 @@ private evaluateChildren() {
             log.info "Got type: ${type}, value = ${value}"
         }
     }
+
+    if (scheduleName != state.scheduleName)
+    {
+        changeSchedule(scheduleName, coolingSet, heatingSet)
+    }
+}
+
+private changeSchedule(scheduleName, coolingSet, heatingSet) {
+    // Save it to the state
+    state.scheduleName = scheduleName
+    state.coolingSetpoint = coolingSet
+    state.heatingSetpoint = heatingSet
+
+    // push it to the theromstat device
+	def tstatThermostat = getChildDevice("${app.id}")
+    tstatThermostat.setpointDown(scheduleName)
+    tstatThermostat.setCoolingSetpoint(coolingSet)
+    tstatThermostat.setHeatingSetpoint(heatingSet)
+
 }
 
 private doProcessing() {

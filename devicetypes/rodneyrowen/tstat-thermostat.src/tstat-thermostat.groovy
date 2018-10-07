@@ -50,7 +50,8 @@ import groovy.transform.Field
 @Field final List RUNNING_OP_STATES = [OP_STATE.HEATING, OP_STATE.COOLING]
 
 // config - TODO: move these to a pref page
-@Field List SUPPORTED_MODES = [MODE.OFF, MODE.HEAT, MODE.AUTO, MODE.COOL]
+@Field List SUPPORTED_MODES = [MODE.OFF, MODE.HEAT, MODE.COOL]
+//@Field List SUPPORTED_MODES = [MODE.OFF, MODE.HEAT, MODE.AUTO, MODE.COOL]
 @Field List SUPPORTED_FAN_MODES = [FAN_MODE.OFF, FAN_MODE.ON, FAN_MODE.AUTO, FAN_MODE.CIRCULATE]
 
 @Field final Float    THRESHOLD_DEGREES = 1.0
@@ -107,6 +108,7 @@ metadata {
     command "setCoolingSetpoint", ["number"]
     command "setThermostatSetpoint", ["number"]
     command "setOperatingState", ["string"]
+    command "setSchedule", ["string"]
         
     command "heatUp"
     command "heatDown"
@@ -119,6 +121,8 @@ metadata {
     command "cycleFanMode"
 
     command "setTemperature", ["number"]
+
+    attribute "schedule", "string"
     }
 
     tiles(scale: 2) {
@@ -207,6 +211,12 @@ metadata {
                 [value: 96, color: "#BC2323"]
             ]
         }
+        valueTile("title", "device.switch", width: 2, height: 1, decoration: "flat") {
+            state "default", label: "Schedule:"
+        }
+        valueTile("schedule", "device.schedule", width: 4, height: 1, decoration: "flat") {
+            state "default", label: '${currentValue}'
+        }
 
         valueTile("refresh", "device.switch", width: 2, height: 1, decoration: "flat") {
             state "default", label: "Refresh", action: "refresh"
@@ -217,6 +227,7 @@ metadata {
 
         main("roomTemp")
         details(["thermostatMulti",
+            "title", "schedule",
             "heatDown", "heatUp",
             "mode",
             "coolDown", "coolUp",
@@ -265,6 +276,7 @@ private initialize() {
     sendEvent(name: "thermostatMode", value: DEFAULT_MODE)
     sendEvent(name: "thermostatFanMode", value: DEFAULT_FAN_MODE)
     sendEvent(name: "thermostatOperatingState", value: DEFAULT_OP_STATE)
+    sendEvent(name: "schedule", value: "Default")
 
     state.lastUserSetpointMode = DEFAULT_PREVIOUS_STATE
     unschedule()
@@ -413,6 +425,11 @@ def setOperatingState(String operatingState) {
     } else {
         log.warn "'$operatingState' is not a supported operating state. Please set one of ${OP_STATE.values().join(', ')}"
     }
+}
+
+def setSchedule(String newSchedule) {
+    log.trace "Set Schedule: $newSchedule"
+    sendEvent(name: "schedule", value: newSchedule)
 }
 
 // setpoint

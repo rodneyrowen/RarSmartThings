@@ -17,8 +17,10 @@ definition(
     description: "Tstat Schedule Child",
     category: "My Apps",
     parent: "rodneyrowen:Tstat Master",
-    iconUrl: "https://s3.amazonaws.com/smartapp-icons/Convenience/Cat-Convenience.png",
-    iconX2Url: "https://s3.amazonaws.com/smartapp-icons/Convenience/Cat-Convenience@2x.png")
+    iconUrl: "https://s3.amazonaws.com/smartapp-icons/Meta/temp_thermo.png",
+    iconX2Url: "https://s3.amazonaws.com/smartapp-icons/Meta/temp_thermo@2x.png",
+    iconX3Url: "https://s3.amazonaws.com/smartapp-icons/Meta/temp_thermo@2x.png"
+)
 
 preferences {
     page(name: "Schedule", title: "Set Schedule", install: true, uninstall: true) {
