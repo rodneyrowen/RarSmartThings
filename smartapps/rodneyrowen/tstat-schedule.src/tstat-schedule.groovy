@@ -33,7 +33,7 @@ preferences {
             input(name: "priority", type: "enum", title: "Priority", required: true, options: ["Inactive","Low","Medium","High"])
         }
         section("Apply Settings When...") {
-            mode title: "Set for specific mode(s)", required: false
+	        input "sModes", "mode", title: "Only when mode is", multiple: true, required: false
         }
         section("On Which Days") {
             input "days", "enum", title: "Select Days of the Week", required: false, multiple: true, options: ["Monday": "Monday", "Tuesday": "Tuesday", "Wednesday": "Wednesday", "Thursday": "Thursday", "Friday": "Friday"]
@@ -57,16 +57,19 @@ def updated() {
 def initialize() {
     def name = settings.scheduleName 
     app.updateLabel("Schedule-${name}") 
+    log.debug "Installed with settings: ${settings}"
 }
 
 def Integer getHeatingSetpoint() {
     def temp = settings.heatingSepoint
-    return temp ? temp.getIntegerValue() : 60
+    temp = temp as Integer
+    return temp ? temp : 60
 }
 
 def Integer getCoolingSetpoint() {
     def temp = settings.coolingSepoint
-    return temp ? temp.getIntegerValue() : 60
+    temp = temp as Integer
+    return temp ? temp : 85
 }
 
 def Integer convertPriority(strText) {
@@ -84,11 +87,12 @@ def Integer convertPriority(strText) {
 }
 
 def Integer isActive() {
-    log.trace "IsActive: ${location.mode} Modes: ${settings.modes}"
+    log.trace "IsActive: ${location.mode} Modes: ${settings.sModes}"
     def state = 0
-    if (modes) {
-        if (modes.contains(location.mode)) {
-            state = convertPriority(settings.modes)
+    if (settings.sModes) {
+        if (sModes.contains(location.mode)) {
+            state = convertPriority(settings.priority)
+		    log.trace "Schedule Priority: ${settings.priority} Returning: ${state}"
         }
     }  
     //def df = new java.text.SimpleDateFormat("EEEE")

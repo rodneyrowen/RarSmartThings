@@ -265,6 +265,10 @@ private evaluateState() {
 }
 
 private evaluateChildren() {
+	def scheduleName = "Default"
+	def bestState = 0
+    def coolingSet = settings.coolingTemp
+    def heatingSet = settings.heatingTemp
     childApps.each {child ->
         def childName = child.label.split('-')
         def type = childName[0]
@@ -272,10 +276,17 @@ private evaluateChildren() {
         if (type == "Schedule") {
             log.info "evalute Schedule type for: ${value}"
             def state = child.isActive()
-            log.info "Schedule returned ${state}"
+            if (state > bestState) {
+                bestState = state
+                scheduleName = value
+                coolingSet = child.getCoolingSetpoint()
+                heatingSet = child.getHeatingSetpoint()
+                log.info "Selected new Schedule ${scheduleName} Cool: ${coolingSet} Heat: ${heatingSet}"
+            }
         } else if (type == "Zone") {
             log.info "evalute Zone for: ${value}"
             def temp = child.getTemperature()
+            
             log.info "Zone returned ${temp}"
         } else {
             log.info "Unknown Child type: ${child.label}"
@@ -290,7 +301,7 @@ private doProcessing() {
     def mode = tstatThermostat.currentValue('thermostatFanMode')
     def setpoint = tstatThermostat.currentValue('thermostatSetpoint')
     def temperature = getTemparture()
-    tstatThermostat.setTemperature(temperature)
+    tstatThermostat.setTemperature(temperature.round(1))
 
     // Read the inputs to the processing
     def houseMode = houseThermostat.currentValue('thermostatMode')

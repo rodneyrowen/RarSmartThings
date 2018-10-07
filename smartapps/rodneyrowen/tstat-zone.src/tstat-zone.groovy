@@ -30,22 +30,10 @@ definition(
 preferences {
     page(name: "Zone Sensors", title: "Select Zone Senors", install: true, uninstall: true) {
         section("Schedule Name") {
-			input(
-				name		: "zoneName"
-				,type		: "text"
-				,title		: "Name of this Zone:"
-				,multiple	: false
-				,required	: true
-			)
+            input "zoneName", "text", title: "Name of this Zone:", multiple: false, required: true
 		}
-        section("Zone Sensors") {
-			input(
-				name		: "tempSensors"
-				,title		: "Temparture Sensors:"
-				,multiple	: true
-				,required	: true
-				,type		: "capability.temperatureMeasurement"
-			)                    
+        section("Temperature Sensors") {
+            input "inTemp", "capability.temperatureMeasurement", title: "Indoor Thermometer", multiple: true, required: true
         }
     }
 }
@@ -76,7 +64,7 @@ def initialize() {
     parent.updateVer(state.vChild)
     state.nextRunTime = 0
     state.zoneTriggerActive = false
-    subscribe(sensors, "temperature", temperatureHandler)
+    subscribe(inTemp, "temperature", temperatureHandler)
 
     //subscribe(motionSensors, "motion.inactive", inactiveHandler)
     //subscribe(motionSensors, "motion.active", activeHandler)
@@ -91,6 +79,7 @@ def initialize() {
     	log.info "Tstat Tile ${zName} exists"
     }
     zoneTile.inactive()
+    log.debug "Installed with settings: ${settings}"
 
 	state.temperature = 0
     runEvery5Minutes(poll)
@@ -105,14 +94,18 @@ def temperatureHandler(evt) {
     def sum     = 0
     def count   = 0
     def average = 0
-
-	if (settings.tempSensors) {
-
-        for (sensor in settings.tempSensors) {
-            count += 1
-            sum   += sensor.currentTemperature
+	def temp = 0
+	if (settings.inTemp) {
+        for (sensor in settings.inTemp) {
+            temp = sensor.currentTemperature
+            if (temp) {
+                log.debug "temp Sensors Reading: ${temp}"
+                count += 1
+                sum += temp
+            } else {
+                log.debug "got Null temp"
+            }
         }
-
         average = sum/count
     } else {
 	    log.debug "No temp Sensors available set average to 60"
@@ -120,16 +113,17 @@ def temperatureHandler(evt) {
     }
     
     state.temperature = average
-    log.debug "average: $average"
+    log.debug "average: ${average}"
 
     def zoneTile = getChildDevice("${app.id}")
 	if (zoneTile) {
-	    log.debug "Set Tile Temp to: $average"
+	    log.debug "Set Tile Temp to: ${average}"
 		zoneTile.setTemperature(average)
    	}
 }
 
 def getTemperature() {
+    temperatureHandler()
 	return state.temperature
 }
 
