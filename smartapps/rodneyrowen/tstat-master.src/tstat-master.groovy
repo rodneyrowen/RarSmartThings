@@ -118,6 +118,10 @@ def main(){
             section("House Thermostat") {
                 input "houseThermostat", "capability.thermostat", title: "House Thermostat"
             }
+            section("Debug") {
+                input("logFilter", "number",title: "(1=ERROR only,2=<1+WARNING>,3=<2+INFO>,4=<3+DEBUG>,5=<4+TRACE>)",  range: "1..5",
+                    description: "optional" )  
+            }
         }
 }
 

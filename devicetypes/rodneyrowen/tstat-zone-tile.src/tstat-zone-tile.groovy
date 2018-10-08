@@ -40,6 +40,12 @@
 import groovy.transform.Field
 
 // enummaps
+@Field final Map      ZONE_MODE = [
+    INACTIVE:   "inactive",
+    ACTIVE:  "active",
+    AUTO:  "auto"
+]
+
 @Field final Map      MODE = [
     OFF:   "off",
     HEAT:  "heat",
@@ -116,17 +122,19 @@ metadata {
         capability "Actuator"
         capability "Health Check"
 		capability "Motion Sensor"
+        capability "Switch"
 
         capability "Thermostat"
         capability "Configuration"
         capability "Refresh"
 
-		attribute "outTemp", "number"
+		attribute "zone", "string"
       	attribute "fanState", "string"
 		attribute "lastUpdate", "string"
         
 		command "active"
 		command "inactive"
+        command "zoneauto"
 
 		command "setThermostatMode", ["string"]
 		command "off"
@@ -152,48 +160,41 @@ metadata {
         command "coolDown"
         command "setpointUp"
         command "setpointDown"
-        command "timerUp"
-        command "timerDown"
 
         command "cycleMode"
         command "cycleFanMode"
 
         command "setTemperature", ["number"]
-        command "setOutdoorTemp", ["number"]
-        command "setFanState", ["string"]
     }
     
     tiles(scale: 2) {
-        multiAttributeTile(name:"thermostatMulti", type:"generic", width:6, height:4) {
-            tileAttribute("device.temperature", key: "PRIMARY_CONTROL") {
-                attributeState("temperature",label:'${currentValue}°',
-					backgroundColors:[
-                        // Celsius Color Range
-                        [value:  0, color: "#153591"],
-                        [value:  7, color: "#1E9CBB"],
-                        [value: 15, color: "#90D2A7"],
-                        [value: 23, color: "#44B621"],
-                        [value: 29, color: "#F1D801"],
-                        [value: 33, color: "#D04E00"],
-                        [value: 36, color: "#BC2323"],
-                        // Fahrenheit Color Range
-                        [value: 40, color: "#153591"],
-                        [value: 44, color: "#1E9CBB"],
-                        [value: 59, color: "#90D2A7"],
-                        [value: 74, color: "#44B621"],
-                        [value: 84, color: "#F1D801"],
-                        [value: 92, color: "#D04E00"],
-                        [value: 96, color: "#BC2323"]
-                    ])
-            }
-            tileAttribute("device.thermostatSetpoint", key: "VALUE_CONTROL") {
-                attributeState("VALUE_UP", action: "setpointUp")
-                attributeState("VALUE_DOWN", action: "setpointDown")
-            }
-            tileAttribute("device.thermostatOperatingState", key: "SECONDARY_CONTROL") {
-                attributeState("default", label: '${currentValue}')
-            }
-        }
+        multiAttributeTile(name:"thermostatMulti", type:"thermostat", width:6, height:4) {
+			tileAttribute("device.temperature", key: "PRIMARY_CONTROL") {
+				attributeState("default", label:'${currentValue}°F', unit:"dF")
+			}
+			tileAttribute("device.thermostatSetpoint", key: "VALUE_CONTROL") {
+				attributeState("VALUE_UP", action: "setpointUp")
+				attributeState("VALUE_DOWN", action: "setpointDown")
+			}
+			tileAttribute("device.thermostatOperatingState", key: "OPERATING_STATE") {
+				attributeState("idle", backgroundColor:"#00A0DC")
+				attributeState("heating", backgroundColor:"#e86d13")
+				attributeState("cooling", backgroundColor:"#00A0DC")
+			}
+			tileAttribute("device.thermostatMode", key: "THERMOSTAT_MODE") {
+				attributeState("off", label:'${name}')
+				attributeState("heat", label:'${name}')
+				attributeState("cool", label:'${name}')
+				attributeState("auto", label:'${name}')
+			}
+			tileAttribute("device.heatingSetpoint", key: "HEATING_SETPOINT") {
+                attributeState("coolingSetpoint", label:'${currentValue}', unit:"dF", defaultState: true)
+				attributeState("heatingSetpoint", label:'${currentValue}', unit:"dF")
+			}
+			tileAttribute("device.coolingSetpoint", key: "COOLING_SETPOINT") {
+				attributeState("coolingSetpoint", label:'${currentValue}', unit:"dF", defaultState: true)
+			}
+		}
 
         valueTile("thermostatMode", "device.thermostatMode", width: 2, height: 2, decoration: "flat") {
             state "off", label:'Thermostat Off', backgroundColor:"#00a0dc"
@@ -211,42 +212,18 @@ metadata {
             state "updating", label: "Working", backgroundColor: "#00a0dc"
         }
 
-        valueTile("roomTemp", "device.temperature", width: 2, height: 2, decoration: "flat") {
-            state "default", label:'${currentValue} °F', unit: "°F", backgroundColors: [
-                // Celsius Color Range
-                [value:  0, color: "#153591"],
-                [value:  7, color: "#1E9CBB"],
-                [value: 15, color: "#90D2A7"],
-                [value: 23, color: "#44B621"],
-                [value: 29, color: "#F1D801"],
-                [value: 33, color: "#D04E00"],
-                [value: 36, color: "#BC2323"],
-                // Fahrenheit Color Range
-                [value: 40, color: "#153591"],
-                [value: 44, color: "#1E9CBB"],
-                [value: 59, color: "#90D2A7"],
-                [value: 74, color: "#44B621"],
-                [value: 84, color: "#F1D801"],
-                [value: 92, color: "#D04E00"],
-                [value: 96, color: "#BC2323"]
-            ]
-        }
-        valueTile("outdoorTemp", "device.outTemp", width: 2, height: 2, decoration: "flat") {
-            state "default", label:'${currentValue} °F', unit: "°F", backgroundColors: [
-                [value: 31, color: "#153591"],
-                [value: 44, color: "#1e9cbb"],
-                [value: 59, color: "#90d2a7"],
-                [value: 74, color: "#44b621"],
-                [value: 84, color: "#f1d801"],
-                [value: 95, color: "#d04e00"],
-                [value: 96, color: "#bc2323"]
-			]
-        }
-
-        valueTile("fanState", "device.fanState", width: 2, height: 2, decoration: "flat") {
-            state "on", icon: "st.thermostat.fan-on", backgroundColor: "#00A0DC"
-            state "off", icon: "st.thermostat.fan-off", backgroundColor: "#ffffff"
+        valueTile("zone", "device.zone", width: 2, height: 2, decoration: "flat") {
+            state "active", label:'Active', icon: "st.motion.motion.active", action: "zoneauto", backgroundColor: "#53a7c0"
+            state "inactive", label:'Inactive', icon: "st.motion.motion.inactive", action: "active", backgroundColor: "#ffffff"
+            state "auto", label:'Auto', icon: "st.motion.motion.active", action: "inactive", backgroundColor: "#53a7c0"
 		}
+
+        valueTile("vent", "device.switch", width: 2, height: 2, canChangeIcon: false) {
+            state "on", icon: "st.vents.vent-open-text", backgroundColor: "#53a7c0"
+            state "off", icon: "st.vents.vent-closed", backgroundColor: "#ffffff"
+            state "obstructed", icon: "st.vents.vent-closed", backgroundColor: "#ff0000"
+            state "clearing", icon: "st.vents.vent-closed", backgroundColor: "#ffff33"
+        }
 
         valueTile("motion", "device.motion", width: 2, height: 2, decoration: "flat") {
             state "active", label:'motion', icon: "st.motion.motion.active", backgroundColor: "#53a7c0"
@@ -274,7 +251,7 @@ metadata {
 
         main("thermostatMulti")
         details(["thermostatMulti",
-            "thermostatMode", "motion", "fanState",
+            "zone", "vent", "motion",
             "reset", "refresh","lastUpdate"
         ])
     }
@@ -306,18 +283,14 @@ private initialize() {
     sendEvent(name: "healthStatus", value: "online")
     sendEvent(name: "DeviceWatch-Enroll", value: [protocol: "cloud", scheme:"untracked"].encodeAsJson(), displayed: false)
 
+    sendEvent(name: "zone", value: ZONE_MODE.ACTIVE)
     sendEvent(name: "temperature", value: DEFAULT_TEMPERATURE, unit: "°F")
     sendEvent(name: "heatingSetpoint", value: DEFAULT_HEATING_SETPOINT, unit: "°F")
-    sendEvent(name: "heatingSetpointMin", value: HEATING_SETPOINT_RANGE.getFrom(), unit: "°F")
-    sendEvent(name: "heatingSetpointMax", value: HEATING_SETPOINT_RANGE.getTo(), unit: "°F")
     sendEvent(name: "thermostatSetpoint", value: DEFAULT_THERMOSTAT_SETPOINT, unit: "°F")
     sendEvent(name: "coolingSetpoint", value: 4, unit: "°F")
-    sendEvent(name: "coolingSetpointMin", value: COOLING_SETPOINT_RANGE.getFrom(), unit: "°F")
-    sendEvent(name: "coolingSetpointMax", value: COOLING_SETPOINT_RANGE.getTo(), unit: "°F")
     sendEvent(name: "thermostatMode", value: DEFAULT_MODE)
     sendEvent(name: "thermostatFanMode", value: DEFAULT_FAN_MODE)
     sendEvent(name: "thermostatOperatingState", value: DEFAULT_OP_STATE)
-    sendEvent(name: "outTemp", value: DEFAULT_OUT_TEMP, unit: "°F")
     sendEvent(name: "fanState", value: DEFAULT_FAN_STATE)
 
     state.lastUserSetpointMode = DEFAULT_PREVIOUS_STATE
@@ -351,27 +324,8 @@ def refresh() {
     sendEvent(name: "coolingSetpoint", value: getCoolingSetpoint(), unit: "°F")
     sendEvent(name: "heatingSetpoint", value: getHeatingSetpoint(), unit: "°F")
     sendEvent(name: "temperature", value: getTemperature(), unit: "°F")
-    sendEvent(name: "outTemp", value: getOutdoorTemp(), unit: "°F")
     sendEvent(name: "fanState", value: getFanState())
     done()
-}
-
-def setOutdoorTemp(Double degreesF) {
-    log.trace "Executing 'setOutdootTemp' $degreesF"
-    sendEvent(name: "outTemp", value: degreesF as Integer, unit: "F")
-    done()
-}
-
-private Integer getOutdoorTemp() {
-    def ts = device.currentState("outTemp")
-    Integer currentTemp = DEFAULT_OUT_TEMP
-    try {
-        currentTemp = ts.integerValue
-    } catch (all) {
-        log.warn "Encountered an error getting Integer value of temperature state. Value is '$ts.stringValue'. Reverting to default of $DEFAULT_TEMPERATURE"
-        setOutdoorTemp(DEFAULT_OUT_TEMP)
-    }
-    return currentTemp
 }
 
 def setFanState(String newFanState) {
@@ -386,12 +340,17 @@ def setLastUpdate() {
 
 def active() {
     log.trace "Executing 'active'"
-	sendEvent(name: "motion", value: "active")
+    sendEvent(name: "zone", value: ZONE_MODE.ACTIVE)
 }
 
 def inactive() {
     log.trace "Executing 'inactive'"
-    sendEvent(name: "motion", value: "inactive")
+    sendEvent(name: "zone", value: ZONE_MODE.INACTIVE)
+}
+
+def zoneauto() {
+    log.trace "Executing 'zoneAuto'"
+    sendEvent(name: "zone", value: ZONE_MODE.AUTO)
 }
 
 private String getFanState() {
@@ -566,26 +525,6 @@ def setTimerSetpoint(Double degreesF) {
     def newSp = boundInt(degreesF as Integer, DELAY_SETPOINT_RANGE)
     log.trace "Executing 'setTimerSetpoint' $newSp"
     sendEvent(name: "coolingSetpoint", value: newSp, unit: "F")
-    done()
-}
-
-private timerUp() {
-    log.trace "Executing 'timerUp'"
-    def newCsp = getCoolingSetpoint() + 1
-    setTimerSetpoint(newCsp)
-    if (getFanMode() == FAN_MODE.CIRCULTE) {
-        sendEvent(name: "thermostatFanMode", value: FAN_MODE.CIRCULTE)
-    }
-    done()
-}
-
-private timerDown() {
-    log.trace "Executing 'timerDown'"
-    def newCsp = getCoolingSetpoint() - 1
-    setTimerSetpoint(newCsp)
-    if (getFanMode() == FAN_MODE.CIRCULTE) {
-        sendEvent(name: "thermostatFanMode", value: FAN_MODE.CIRCULTE)
-    }
     done()
 }
 

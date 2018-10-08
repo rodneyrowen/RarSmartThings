@@ -135,3 +135,31 @@ def activeHandler(evt){
 def inactiveHandler(evt){
 }
 
+def setThermostatMode(String value) {
+    log.trace "Executing 'setThermostatMode' $value"
+    state.mode = value
+    def zoneTile = getChildDevice("${app.id}")
+	if (zoneTile) {
+		zoneTile.setThermostatMode(value)
+   	}
+}
+
+def setOperatingState(String operatingState) {
+    log.trace "Executing 'setOperatingState' $value"
+    state.opState = operatingState
+    def zoneTile = getChildDevice("${app.id}")
+	if (zoneTile) {
+		zoneTile.setOperatingState(operatingState)
+   	}
+}
+
+def setThermostatSetpoint(Double degreesF) {
+    log.trace "Executing 'setThermostatSetpoint' $degreesF"
+    state.setPoint = degreesF
+    def zoneTile = getChildDevice("${app.id}")
+	if (zoneTile) {
+		zoneTile.setThermostatSetpoint(degreesF)
+   	}
+}
+
+
