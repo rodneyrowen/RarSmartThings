@@ -128,10 +128,6 @@ def schedules(){
         ,nextPage   : "zones"
         ,uninstall  : true
         ){
-            section("Deafult Schedule") {
-                input "coolingTemp", "number", title: "Cooling Setpoint"
-                input "heatingTemp", "number", title: "Heating Setpoint"
-            }
             if (installed){
             	section("Schedules"){
                     app(name: "childSchedules", appName: "Tstat Schedule", namespace: "rodneyrowen", title: "Create New Schedule...", multiple: true)
@@ -140,6 +136,10 @@ def schedules(){
             	section(){
                 	paragraph("Tap done to finish the initial installation.\nRe-open the app from the smartApps flyout to create your zones.")
                 }
+            }
+            section("Default Setpoints (if no schedule applies") {
+                input "coolingTemp", "number", title: "Cooling Setpoint"
+                input "heatingTemp", "number", title: "Heating Setpoint"
             }
         }
 }
@@ -206,27 +206,34 @@ def initialize() {
     subscribe(tstatThermostat, "coolingSetpoint", coolingSetpointHandler)
     subscribe(tstatThermostat, "heatingSetpoint", heatingSetpointHandler)
     subscribe(tstatThermostat, "thermostatSetpoint", setpointHandler)
+    subscribe(location, "mode", modeChangeHandler)
+    log.debug "Subscribed to devices"
 
     runEvery5Minutes(poll)
 
     // save defaults to state
+    log.debug "Save defaults"
+    changeMode(MODE.OFF, OP_STATE.IDLE, SETPOINT_TYPE.OFF)
     changeSchedule("Default", settings.coolingTemp, settings.heatingTemp) 
 
-    log.debug "Subscribed to devices:"
+}
+
+def modeChangeHandler(evt) {
+    log.trace "Location Mode Change ${location.mode}"
+    evaluateState()
 }
 
 def modeHandler(evt) {
 	def tstatThermostat = getChildDevice("${app.id}")
     def mode = tstatThermostat.currentValue('thermostatMode')
     log.trace "Got Mode ${mode}"
-    evaluateState()
+    evaluateMode(mode)
 }
 
 def setpointHandler(evt) {
 	def tstatThermostat = getChildDevice("${app.id}")
     def setpoint = tstatThermostat.currentValue('thermostatSetpoint')
-    log.trace "Setpoint Changed ${setpoint}"
-    evaluateState()
+    updateSetpoint(setpoint)
 }
 
 def coolingSetpointHandler(evt) {
@@ -257,9 +264,42 @@ private double getTemparture() {
     return average
 }
 
+def Integer getThermostatSetpoint() {
+    def ts = state.heatingSetpoint
+    if (state.setpointType == SETPOINT_TYPE.COOLING) {
+    	ts = state.coolingSetpoint
+    }
+    return ts ? ts : DEFAULT_THERMOSTAT_SETPOINT
+}
+
 def poll() {
 	// Periodic poller since event listening does not seem to be working
     evaluateState()
+}
+
+private evaluateMode(def newMode) {
+	//if (newMode != state.mode) {
+        log.debug "Set mode: $newMode"
+        switch (newMode) {
+            case MODE.AUTO:
+                changeMode(MODE.AUTO, OP_STATE.HEATING, SETPOINT_TYPE.HEATING)
+                break;
+            case MODE.HEAT:
+                changeMode(MODE.HEAT, OP_STATE.HEATING, SETPOINT_TYPE.HEATING)
+                break;
+            case MODE.COOL:
+                changeMode(MODE.COOL, OP_STATE.COOLING, SETPOINT_TYPE.COOLING)
+                break;
+            case MODE.OFF: 
+                changeMode(MODE.OFF, OP_STATE.IDLE, SETPOINT_TYPE.HEATING)
+                break;
+            default:
+                changeMode(MODE.OFF, OP_STATE.IDLE, SETPOINT_TYPE.HEATING)
+                log.warn "'$newMode' is not a supported state. Please set one of ${MODE.values().join(', ')}"
+                break;
+        }
+        evaluateState()
+    //}
 }
 
 private evaluateState() {
@@ -297,39 +337,96 @@ private evaluateChildren() {
         }
     }
 
-    if (scheduleName != state.scheduleName)
-    {
+//    if (scheduleName != state.scheduleName)
+//    {
         changeSchedule(scheduleName, coolingSet, heatingSet)
-    }
+//    }
+}
+
+
+private changeMode(newMode, newOpState, newSetpointType) {
+    log.trace "Change Mode: ${newMode} op ${newOpState} type ${newSetpointType}"
+    // Save it to the state
+    state.mode = newMode
+    state.opState = newOpState
+    state.setpointType = newSetpointType
+
+    // push it to the theromstat device
+	def tstatThermostat = getChildDevice("${app.id}")
+    tstatThermostat.setOperatingState(newOpState)
 }
 
 private changeSchedule(scheduleName, coolingSet, heatingSet) {
+    log.trace "Change Schedule: ${scheduleName} cool ${coolingSet} heat ${heatingSet}"
     // Save it to the state
     state.scheduleName = scheduleName
     state.coolingSetpoint = coolingSet
     state.heatingSetpoint = heatingSet
+    updateSetpoint(getThermostatSetpoint())
 
     // push it to the theromstat device
 	def tstatThermostat = getChildDevice("${app.id}")
-    tstatThermostat.setpointDown(scheduleName)
+    tstatThermostat.setSchedule(scheduleName)
+    tstatThermostat.setThermostatSetpoint(state.setpoint)
     tstatThermostat.setCoolingSetpoint(coolingSet)
     tstatThermostat.setHeatingSetpoint(heatingSet)
 
 }
 
+private updateSetpoint(setpoint) {
+    log.trace "Change Setpoint: ${setpoint}"
+    // Save it to the state
+    state.setpoint = setpoint
+
+    // push it to the theromstat device
+	def tstatThermostat = getChildDevice("${app.id}")
+    tstatThermostat.setThermostatSetpoint(state.setpoint)
+}
+
+private String determineHouseMode(mode) {
+	// For right now
+    def houseMode = MODE.OFF
+    switch (mode) {
+        case MODE.COOL:
+    		houseMode = MODE.COOL
+            break;
+        case MODE.AUTO:
+        case MODE.HEAT:
+    		houseMode = MODE.HEAT
+            break;
+        case MODE.OFF: 
+    	default:
+        	houseMode = MODE.OFF
+            break;
+        }
+	return houseMode       
+}
+
 private doProcessing() {
 	def tstatThermostat = getChildDevice("${app.id}")
-    // Only to auto processing in auto mode so check this first
-    def mode = tstatThermostat.currentValue('thermostatFanMode')
-    def setpoint = tstatThermostat.currentValue('thermostatSetpoint')
     def temperature = getTemparture()
     tstatThermostat.setTemperature(temperature.round(1))
 
     // Read the inputs to the processing
     def houseMode = houseThermostat.currentValue('thermostatMode')
     def houseTemp = houseThermostat.currentValue('temperature')
+    def houseSetpoint = houseThermostat.currentValue('thermostatSetpoint')
+    def houseCooling = houseThermostat.currentValue('coolingSetpoint')
+    def houseHeating = houseThermostat.currentValue('heatingSetpoint')
+    log.trace "Evalutate: ${mode} temp ${temperature}/${state.setpoint} house ${houseTemp}/${houseSetpoint}(${houseHeating}-${houseCooling})"
 
-    log.trace "Evalutate: ${mode} temp ${temperature} house ${houseTemp} setpoint ${setpoint} windows ${openWindow}"
+    def neededHouseMode = determineHouseMode(state.mode)
+    if (houseMode != neededHouseMode) {
+	    log.trace "Seting House Mode to ${neededHouseMode}"
+        houseThermostat.setThermostatMode(neededHouseMode)
+    }
+
+	def tempDelta = temperature - houseTemp
+    def newHeating = state.heatingSetpoint + tempDelta
+    def newCooling = state.coolingSetpoint + tempDelta
+    log.trace "Seting House setpoints to ${newHeating} and ${newCooling}"
+    houseThermostat.setHeatingSetpoint(newHeating.round(0))
+    houseThermostat.setCoolingSetpoint(newCooling.round(0))
 }
 
 def getVersionInfo(){

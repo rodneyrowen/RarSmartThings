@@ -29,7 +29,7 @@ preferences {
         }
         section("Set points") {
             input "coolingSetpoint", "number", title: "Cooling Setpoint", required: true
-            input "heatingSepoint", "number", title: "Heating Setpoint", required: true
+            input "heatingSetpoint", "number", title: "Heating Setpoint", required: true
         }
         section("Priority") {
             input(name: "priority", type: "enum", title: "Priority", required: true, options: ["Inactive","Low","Medium","High"])
@@ -63,13 +63,13 @@ def initialize() {
 }
 
 def Integer getHeatingSetpoint() {
-    def temp = settings.heatingSepoint
+    def temp = settings.heatingSetpoint
     temp = temp as Integer
     return temp ? temp : 60
 }
 
 def Integer getCoolingSetpoint() {
-    def temp = settings.coolingSepoint
+    def temp = settings.coolingSetpoint
     temp = temp as Integer
     return temp ? temp : 85
 }
@@ -94,7 +94,6 @@ def Integer isActive() {
     if (settings.sModes) {
         if (sModes.contains(location.mode)) {
             state = convertPriority(settings.priority)
-		    log.trace "Schedule Priority: ${settings.priority} Returning: ${state}"
         }
     }  
     //def df = new java.text.SimpleDateFormat("EEEE")
@@ -111,5 +110,6 @@ def Integer isActive() {
             //roomLight.off()
        // }
    // }
+   log.trace "Schedule Priority: ${settings.priority} Returning: ${state}"
    return state
 }
