@@ -128,7 +128,7 @@ metadata {
     tiles(scale: 2) {
         multiAttributeTile(name:"thermostatMulti", type:"thermostat", width:6, height:4) {
 			tileAttribute("device.temperature", key: "PRIMARY_CONTROL") {
-				attributeState("default", label:'${currentValue} °F', unit:"dF")
+				attributeState("default", label:'${currentValue}°F', unit:"dF")
 			}
 			tileAttribute("device.thermostatSetpoint", key: "VALUE_CONTROL") {
 				attributeState("VALUE_UP", action: "setpointUp")
@@ -171,7 +171,14 @@ metadata {
             state "updating", label: "Working"
         }
 
-        valueTile("heatingSetpoint", "device.heatingSetpoint", width: 2, height: 2, decoration: "flat") {
+        valueTile("coolingSetpointSm", "device.coolingSetpoint", width: 2, height: 1, decoration: "flat") {
+            state "cool", label: '${currentValue}°F', unit: "°F", backgroundColor: "#00A0DC"
+        }
+        valueTile("heatingSetpointSm", "device.heatingSetpoint", width: 2, height: 1, decoration: "flat") {
+            state "heat", label:'${currentValue}', unit: "°F", backgroundColor:"#E86D13"
+        }
+
+		valueTile("heatingSetpoint", "device.heatingSetpoint", width: 2, height: 2, decoration: "flat") {
             state "heat", label:'Heat\n${currentValue} °F', unit: "°F", backgroundColor:"#E86D13"
         }
         standardTile("heatDown", "device.temperature", width: 1, height: 1, decoration: "flat") {
@@ -218,24 +225,29 @@ metadata {
             state "default", label: '${currentValue}'
         }
 
-        valueTile("refresh", "device.switch", width: 2, height: 1, decoration: "flat") {
+        valueTile("refresh", "device.switch", width: 2, height: 2, decoration: "flat") {
             state "default", label: "Refresh", action: "refresh"
         }
-        valueTile("reset", "device.switch", width: 2, height: 1, decoration: "flat") {
+        valueTile("reset", "device.switch", width: 2, height: 2, decoration: "flat") {
             state "default", label: "Reset to Defaults", action: "configure"
         }
 
         main("roomTemp")
         details(["thermostatMulti",
             "title", "schedule",
-            "heatDown", "heatUp",
             "mode",
-            "coolDown", "coolUp",
             "heatingSetpoint",
             "coolingSetpoint",
             "fanMode",
             "refresh", "reset"
         ])
+//            "heatDown", "heatUp",
+//            "mode",
+//            "coolDown", "coolUp",
+//            "heatingSetpoint",
+//            "coolingSetpoint",
+//            "fanMode",
+//            "refresh", "reset"
     }
 }
 
