@@ -309,6 +309,7 @@ private evaluateMode(def newMode) {
 private evaluateState() {
     evaluateChildren()
     doProcessing()
+    updateZones()
 }
 
 private evaluateChildren() {
@@ -341,10 +342,10 @@ private evaluateChildren() {
         }
     }
 
-//    if (scheduleName != state.scheduleName)
-//    {
+    if (scheduleName != state.scheduleName)
+    {
         changeSchedule(scheduleName, coolingSet, heatingSet)
-//    }
+    }
 }
 
 
@@ -385,6 +386,16 @@ private updateSetpoint(setpoint) {
     // push it to the theromstat device
 	def tstatThermostat = getChildDevice("${app.id}")
     tstatThermostat.setThermostatSetpoint(state.setpoint)
+    
+    if (state.setpointType == SETPOINT_TYPE.COOLING) {
+    	state.coolingSetpoint = setpoint
+	    tstatThermostat.setCoolingSetpoint(setpoint)
+    } else {
+    	state.heatingSetpoint = setpoint
+	    tstatThermostat.setHeatingSetpoint(setpoint)
+    }
+    doProcessing()
+    updateZones()
 }
 
 private String determineHouseMode(mode) {
@@ -431,6 +442,22 @@ private doProcessing() {
     log.trace "Seting House setpoints to ${newHeating} and ${newCooling}"
     houseThermostat.setHeatingSetpoint(newHeating.round(0))
     houseThermostat.setCoolingSetpoint(newCooling.round(0))
+}
+
+private updateZones() {
+    childApps.each {child ->
+        def childName = child.label.split('-')
+        def type = childName[0]
+        def value = childName[1]
+        if (type == "Zone") {
+            log.info "Updating Zone ${value}: ${state.mode} ${state.opState} ${state.heatingSetpoint} ${state.coolingSetpoint}"
+            child.setThermostatMode(state.mode)
+			child.setOperatingState(state.opState)
+			child.setThermostatSetpoint(state.setpoint)
+            child.setHeatingSetpoint(state.heatingSetpoint)
+            child.setCoolingSetpoint(state.coolingSetpoint)
+        }
+    }
 }
 
 def getVersionInfo(){

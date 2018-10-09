@@ -145,7 +145,7 @@ def setThermostatMode(String value) {
 }
 
 def setOperatingState(String operatingState) {
-    log.trace "Executing 'setOperatingState' $value"
+    log.trace "Executing 'setOperatingState' $operatingState"
     state.opState = operatingState
     def zoneTile = getChildDevice("${app.id}")
 	if (zoneTile) {
@@ -162,4 +162,21 @@ def setThermostatSetpoint(Double degreesF) {
    	}
 }
 
+def setHeatingSetpoint(Double degreesF) {
+    log.trace "Executing 'setHeatingSetpoint' $degreesF"
+    state.heatinfSetpoint = degreesF
+    def zoneTile = getChildDevice("${app.id}")
+	if (zoneTile) {
+		zoneTile.setHeatingSetpoint(degreesF)
+   	}
+}
+
+def setCoolingSetpoint(Double degreesF) {
+    log.trace "Executing 'setCoolingSetpoint' $degreesF"
+    state.heatinfSetpoint = degreesF
+    def zoneTile = getChildDevice("${app.id}")
+	if (zoneTile) {
+		zoneTile.setCoolingSetpoint(degreesF)
+   	}
+}
 
