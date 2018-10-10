@@ -78,7 +78,9 @@ def initialize() {
     } else {
     	log.info "Tstat Tile ${zName} exists"
     }
-    zoneTile.inactive()
+    
+    subscribe(zoneTile, "zone", zoneActiveHandler)
+
     log.debug "Installed with settings: ${settings}"
 
 	state.temperature = 0
@@ -99,7 +101,6 @@ def temperatureHandler(evt) {
         for (sensor in settings.inTemp) {
             temp = sensor.currentTemperature
             if (temp) {
-                log.debug "temp Sensors Reading: ${temp}"
                 count += 1
                 sum += temp
             } else {
@@ -109,7 +110,7 @@ def temperatureHandler(evt) {
         average = sum/count
     } else {
 	    log.debug "No temp Sensors available set average to 60"
-    	average = 60
+    	average = 60.0
     }
     
     state.temperature = average
@@ -121,12 +122,43 @@ def temperatureHandler(evt) {
 		zoneTile.setTemperature(average)
    	}
 }
+@Field final Map      ZONE_MODE = [
+    INACTIVE:   "inactive",
+    ACTIVE:  "active",
+    AUTO:  "auto"
+]
+
+def zoneActiveHandler(evt) {
+    def zoneTile = getChildDevice("${app.id}")
+	if (zoneTile) {
+		def zoneState = zoneTile.getCurrentValue("zone")
+        state.isActive = zoneState
+        log.debug "Got Zone State: ${zoneState}"
+   	}
+}
 
 def getTemperature() {
     temperatureHandler()
 	return state.temperature
 }
 
+def Double getRoomDelta() {
+    temperatureHandler()
+	return state.setPoint - state.temperature
+}
+
+def Integer isActive() {
+    def zoneTile = getChildDevice("${app.id}")
+	if (zoneTile) {
+		def zoneState = zoneTile.getCurrentValue("zone")
+        log.debug "Check Zone Active: ${zoneState}"
+        if (zoneState == "inactive") {
+            return 0
+        } else {
+            return 1
+        }
+   	}
+}
 
 def activeHandler(evt){
     log.trace "active handler fired via [${evt.displayName}] UTC: ${evt.date.format("yyyy-MM-dd HH:mm:ss")}"

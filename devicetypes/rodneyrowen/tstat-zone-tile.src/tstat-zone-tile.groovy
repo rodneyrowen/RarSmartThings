@@ -260,19 +260,16 @@ metadata {
 def installed() {
     log.trace "Executing 'installed'"
     initialize()
-    done()
 }
 
 def updated() {
     log.trace "Executing 'updated'"
     initialize()
-    done()
 }
 
 def configure() {
     log.trace "Executing 'configure'"
     initialize()
-    done()
 }
 
 private initialize() {
@@ -311,7 +308,6 @@ def parse(String description) {
         }
         parsedEvents = createEvent(name: name, value: pair[1]?.trim())
     }
-    done()
     return parsedEvents
 }
 
@@ -325,7 +321,6 @@ def refresh() {
     sendEvent(name: "heatingSetpoint", value: getHeatingSetpoint(), unit: "°F")
     sendEvent(name: "temperature", value: getTemperature(), unit: "°F")
     sendEvent(name: "fanState", value: getFanState())
-    done()
 }
 
 def setFanState(String newFanState) {
@@ -369,14 +364,12 @@ def setThermostatMode(String value) {
     } else {
         log.warn "'$value' is not a supported mode. Please set one of ${SUPPORTED_MODES.join(', ')}"
     }
-    done()
 }
 
 private String cycleMode() {
     log.trace "Executing 'cycleMode'"
     String nextMode = nextListElement(SUPPORTED_MODES, getThermostatMode())
     setThermostatMode(nextMode)
-    done()
     return nextMode
 }
 
@@ -422,7 +415,6 @@ private String cycleFanMode() {
     log.trace "Executing 'cycleFanMode'"
     String nextMode = nextListElement(SUPPORTED_FAN_MODES, getFanMode())
     setThermostatFanMode(nextMode)
-    done()
     return nextMode
 }
 
@@ -480,7 +472,6 @@ def setThermostatSetpoint(Double degreesF) {
     def newSp = boundInt(degreesF as Integer, COOLING_SETPOINT_RANGE)
     log.trace "Executing 'setThermostatSetpoint' $newSp"
     sendEvent(name: "thermostatSetpoint", value: newSp)
-    done()
 }
 
 private Integer getHeatingSetpoint() {
@@ -492,21 +483,18 @@ def setHeatingSetpoint(Double degreesF) {
     def newSp = boundInt(degreesF as Integer, HEATING_SETPOINT_RANGE)
     log.trace "Executing 'setHeatingSetpoint' $newSp"
     sendEvent(name: "heatingSetpoint", value: newSp, unit: "F")
-    done()
 }
 
 private heatUp() {
     log.trace "Executing 'heatUp'"
     def newHsp = getHeatingSetpoint() + 1
     setHeatingSetpoint(newHsp)
-    done()
 }
 
 private heatDown() {
     log.trace "Executing 'heatDown'"
     def newHsp = getHeatingSetpoint() - 1
     setHeatingSetpoint(newHsp)
-    done()
 }
 
 private Integer getCoolingSetpoint() {
@@ -518,28 +506,24 @@ def setCoolingSetpoint(Double degreesF) {
     def newSp = boundInt(degreesF as Integer, COOLING_SETPOINT_RANGE)
     log.trace "Executing 'setCoolingSetpoint' $newSp"
     sendEvent(name: "coolingSetpoint", value: newSp, unit: "F")
-    done()
 }
 
 def setTimerSetpoint(Double degreesF) {
     def newSp = boundInt(degreesF as Integer, DELAY_SETPOINT_RANGE)
     log.trace "Executing 'setTimerSetpoint' $newSp"
     sendEvent(name: "coolingSetpoint", value: newSp, unit: "F")
-    done()
 }
 
 private coolUp() {
     log.trace "Executing 'coolUp'"
     def newCsp = getCoolingSetpoint() + 1
     setCoolingSetpoint(newCsp)
-    done()
 }
 
 private coolDown() {
     log.trace "Executing 'coolDown'"
     def newCsp = getCoolingSetpoint() - 1
     setCoolingSetpoint(newCsp)
-    done()
 }
 
 private setpointUp() {
@@ -549,7 +533,6 @@ private setpointUp() {
     if (getFanMode() == FAN_MODE.AUTO) {
         sendEvent(name: "thermostatFanMode", value: FAN_MODE.AUTO)
     }
-    done()
 }
 
 private setpointDown() {
@@ -559,7 +542,6 @@ private setpointDown() {
     if (getFanMode() == FAN_MODE.AUTO) {
         sendEvent(name: "thermostatFanMode", value: FAN_MODE.AUTO)
     }
-    done()
 }
 
 // simulated temperature
@@ -590,10 +572,3 @@ private Integer boundInt(Number value, IntRange theRange) {
     value = Math.max(theRange.getFrom(), Math.min(theRange.getTo(), value))
     return value.toInteger()
 }
-
-/**
- * Just mark the end of the execution in the log
- */
-private void done() {
-    log.trace "---- DONE ----"
-}    

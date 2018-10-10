@@ -89,27 +89,35 @@ def Integer convertPriority(strText) {
 }
 
 def Integer isActive() {
-    log.trace "IsActive: ${location.mode} Modes: ${settings.sModes}"
-    def state = 0
-    if (settings.sModes) {
-        if (sModes.contains(location.mode)) {
-            state = convertPriority(settings.priority)
+
+    def state = convertPriority(settings.priority)
+    if ( (state > 0) && (settings.sModes) ) {
+        // first check in the appropriate mode
+        if (!settings.sModes.contains(location.mode)) {
+            state = 0
         }
-    }  
-    //def df = new java.text.SimpleDateFormat("EEEE")
-    // Ensure the new date object is set to local time zone
-    //df.setTimeZone(location.timeZone)
-    //def day = df.format(new Date())
-    //Does the preference input Days, i.e., days-of-week, contain today?
-    //def dayCheck = days.contains(day)
-    //if (dayCheck) {
-        //def between = timeOfDayIsBetween(fromTime, toTime, new Date(), location.timeZone)
-        //if (between) {
-            //roomLight.on()
-       // } else {
-            //roomLight.off()
-       // }
-   // }
-   log.trace "Schedule Priority: ${settings.priority} Returning: ${state}"
+    }
+
+    if ( (state > 0) && (settings.days) ) {
+        // Now check days
+        def df = new java.text.SimpleDateFormat("EEEE")
+        // Ensure the new date object is set to local time zone
+        df.setTimeZone(location.timeZone)
+        def day = df.format(new Date())
+        //Does the preference input Days, i.e., days-of-week, contain today?
+        if (!settings.days.contains(day))) {
+            state = 0
+        }
+    }
+
+    if ( (state > 0) && (settings.fromTime) && (settings.toTime) ) {
+        // Now check time range
+        def between = timeOfDayIsBetween(fromTime, toTime, new Date(), location.timeZone)
+        if (!between) {
+            state = 0
+        }
+    }
+
+   log.debug "IsActive(Returns: ${state}) Modes: ${settings.sModes} Days: ${settings.days}"
    return state
 }

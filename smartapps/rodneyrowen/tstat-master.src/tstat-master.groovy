@@ -17,6 +17,14 @@
 import groovy.transform.Field
 
 // enummaps
+@Field final Map      LOG = [
+    ERROR:   5,
+    WARN:    4,
+    INFO:    3,
+    TRACE:   2,
+    DEBUG:   1
+]
+
 @Field final Map      MODE = [
     OFF:   "off",
     HEAT:  "heat",
@@ -119,7 +127,7 @@ def main(){
                 input "houseThermostat", "capability.thermostat", title: "House Thermostat"
             }
             section("Debug") {
-                input("logFilter", "number",title: "(1=ERROR only,2=<1+WARNING>,3=<2+INFO>,4=<3+DEBUG>,5=<4+TRACE>)",  range: "1..5",
+                input("traceLevel", "number",title: "3=Normal,2=Debug,1=Verbose",  range: "1..3", defaultValue: 1,
                     description: "optional" )  
             }
         }
@@ -169,12 +177,12 @@ def zones(){
 }
 
 def installed() {
-    log.debug "Installed with settings: ${settings}"
+    debugLog(LOG.TRACE, "Installed with settings: ${settings}")
     initialize()
 }
 
 def updated() {
-    log.debug "Updated with settings: ${settings}"
+    debugLog(LOG.TRACE, "Updated with settings: ${settings}")
     unsubscribe()
     initialize()
 }
@@ -198,10 +206,10 @@ def initialize() {
     def zName = "Tstat Thermostat"
     def tstatThermostat = getChildDevice(deviceID)
     if (!tstatThermostat) {
-    	log.info "create Tstat Theromstat"
+    	debugLog(LOG.DEBUG, "create Tstat Theromstat")
         tstatThermostat = addChildDevice("rar", "Tstat Thermostat", deviceID, getHubID(), [name: zName, label: zName, completedSetup: true])
     } else {
-    	log.info "Tstat Theromstat exists"
+    	debugLog(LOG.DEBUG, "Tstat Theromstat exists")
     }
     //tstatThermostat.inactive()
     // Subscribe to things in the the thermostat
@@ -211,26 +219,25 @@ def initialize() {
     subscribe(tstatThermostat, "heatingSetpoint", heatingSetpointHandler)
     subscribe(tstatThermostat, "thermostatSetpoint", setpointHandler)
     subscribe(location, "mode", modeChangeHandler)
-    log.debug "Subscribed to devices"
 
     runEvery5Minutes(poll)
 
     // save defaults to state
-    log.debug "Save defaults"
+    debugLog(LOG.DEBUG, "Save defaults")
     changeMode(MODE.OFF, OP_STATE.IDLE, SETPOINT_TYPE.OFF)
     changeSchedule("Default", settings.coolingTemp, settings.heatingTemp) 
 
 }
 
 def modeChangeHandler(evt) {
-    log.trace "Location Mode Change ${location.mode}"
+    debugLog(LOG.DEBUG, "Location Mode Change ${location.mode}")
     evaluateState()
 }
 
 def modeHandler(evt) {
 	def tstatThermostat = getChildDevice("${app.id}")
     def mode = tstatThermostat.currentValue('thermostatMode')
-    log.trace "Got Mode ${mode}"
+    debugLog(LOG.DEBUG, "Got Mode ${mode}")
     evaluateMode(mode)
 }
 
@@ -243,14 +250,14 @@ def setpointHandler(evt) {
 def coolingSetpointHandler(evt) {
 	def tstatThermostat = getChildDevice("${app.id}")
     def setpoint = tstatThermostat.currentValue('coolingSetpoint')
-    log.trace "Cooling Setpoint Changed ${setpoint}"
+    debugLog(LOG.DEBUG, "Cooling Setpoint Changed ${setpoint}")
     evaluateState()
 }
 
 def heatingSetpointHandler(evt) {
 	def tstatThermostat = getChildDevice("${app.id}")
     def setpoint = tstatThermostat.currentValue('heatingSetpoint')
-    log.trace "Heating Setpoint Changed ${setpoint}"
+    debugLog(LOG.DEBUG, "Heating Setpoint Changed ${setpoint}")
     evaluateState()
 }
 
@@ -283,7 +290,7 @@ def poll() {
 
 private evaluateMode(def newMode) {
 	//if (newMode != state.mode) {
-        log.debug "Set mode: $newMode"
+        debugLog(LOG.TRACE, "Set mode: ${newMode}")
         switch (newMode) {
             case MODE.AUTO:
                 changeMode(MODE.AUTO, OP_STATE.HEATING, SETPOINT_TYPE.HEATING)
@@ -299,7 +306,7 @@ private evaluateMode(def newMode) {
                 break;
             default:
                 changeMode(MODE.OFF, OP_STATE.IDLE, SETPOINT_TYPE.HEATING)
-                log.warn "'$newMode' is not a supported state. Please set one of ${MODE.values().join(', ')}"
+                debugLog(LOG.WARN, "'$newMode' is not a supported state. Please set one of ${MODE.values().join(', ')}")
                 break;
         }
         evaluateState()
@@ -317,28 +324,30 @@ private evaluateChildren() {
 	def bestState = 0
     def coolingSet = settings.coolingTemp
     def heatingSet = settings.heatingTemp
+    def biggestDelta = 0
     childApps.each {child ->
         def childName = child.label.split('-')
         def type = childName[0]
         def value = childName[1]
         if (type == "Schedule") {
-            log.info "evalute Schedule type for: ${value}"
+            debugLog(LOG.DEBUG, "Evalute Schedule type for: ${value}")
             def state = child.isActive()
             if (state > bestState) {
                 bestState = state
                 scheduleName = value
                 coolingSet = child.getCoolingSetpoint()
                 heatingSet = child.getHeatingSetpoint()
-                log.info "Selected new Schedule ${scheduleName} Cool: ${coolingSet} Heat: ${heatingSet}"
+                debugLog(LOG.TRACE, "Selected new Schedule ${scheduleName} Cool: ${coolingSet} Heat: ${heatingSet}")
             }
         } else if (type == "Zone") {
-            log.info "evalute Zone for: ${value}"
-            def temp = child.getTemperature()
-            
-            log.info "Zone returned ${temp}"
+            debugLog(LOG.DEBUG, "Evalute Zone type for: ${value}")
+            def active = child.isActive
+            if (active) {
+                def tempDelta = child.getRoomDelta()
+                debugLog(LOG.TRACE, "Zone ${value} returned ${tempDelta}")
+            }
         } else {
-            log.info "Unknown Child type: ${child.label}"
-            log.info "Got type: ${type}, value = ${value}"
+            debugLog(LOG.WARN, "Unknown Child type: ${child.label}")
         }
     }
 
@@ -350,7 +359,7 @@ private evaluateChildren() {
 
 
 private changeMode(newMode, newOpState, newSetpointType) {
-    log.trace "Change Mode: ${newMode} op ${newOpState} type ${newSetpointType}"
+    debugLog(LOG.INFO, "Change Mode: ${newMode} op ${newOpState} type ${newSetpointType}")
     // Save it to the state
     state.mode = newMode
     state.opState = newOpState
@@ -362,7 +371,7 @@ private changeMode(newMode, newOpState, newSetpointType) {
 }
 
 private changeSchedule(scheduleName, coolingSet, heatingSet) {
-    log.trace "Change Schedule: ${scheduleName} cool ${coolingSet} heat ${heatingSet}"
+    debugLog(LOG.INFO, "Change Schedule: ${scheduleName} cool ${coolingSet} heat ${heatingSet}")
     // Save it to the state
     state.scheduleName = scheduleName
     state.coolingSetpoint = coolingSet
@@ -379,7 +388,7 @@ private changeSchedule(scheduleName, coolingSet, heatingSet) {
 }
 
 private updateSetpoint(setpoint) {
-    log.trace "Change Setpoint: ${setpoint}"
+    debugLog(LOG.INFO, "Change Setpoint: ${setpoint}")
     // Save it to the state
     state.setpoint = setpoint
 
@@ -387,13 +396,13 @@ private updateSetpoint(setpoint) {
 	def tstatThermostat = getChildDevice("${app.id}")
     tstatThermostat.setThermostatSetpoint(state.setpoint)
     
-    if (state.setpointType == SETPOINT_TYPE.COOLING) {
-    	state.coolingSetpoint = setpoint
-	    tstatThermostat.setCoolingSetpoint(setpoint)
-    } else {
-    	state.heatingSetpoint = setpoint
-	    tstatThermostat.setHeatingSetpoint(setpoint)
-    }
+    //if (state.setpointType == SETPOINT_TYPE.COOLING) {
+    //	state.coolingSetpoint = setpoint
+	//    tstatThermostat.setCoolingSetpoint(setpoint)
+    //} else {
+    //	state.heatingSetpoint = setpoint
+	//    tstatThermostat.setHeatingSetpoint(setpoint)
+    //}
     doProcessing()
     updateZones()
 }
@@ -428,18 +437,18 @@ private doProcessing() {
     def houseSetpoint = houseThermostat.currentValue('thermostatSetpoint')
     def houseCooling = houseThermostat.currentValue('coolingSetpoint')
     def houseHeating = houseThermostat.currentValue('heatingSetpoint')
-    log.trace "Evalutate: ${mode} temp ${temperature}/${state.setpoint} house ${houseTemp}/${houseSetpoint}(${houseHeating}-${houseCooling})"
+    debugLog(LOG.INFO, "Evalutate: ${mode} temp ${temperature}/${state.setpoint} house ${houseTemp}/${houseSetpoint}(${houseHeating}-${houseCooling})")
 
     def neededHouseMode = determineHouseMode(state.mode)
     if (houseMode != neededHouseMode) {
-	    log.trace "Seting House Mode to ${neededHouseMode}"
+	    debugLog(LOG.DEBUG, "Seting House Mode to ${neededHouseMode}")
         houseThermostat.setThermostatMode(neededHouseMode)
     }
 
 	def tempDelta = temperature - houseTemp
     def newHeating = state.heatingSetpoint + tempDelta
     def newCooling = state.coolingSetpoint + tempDelta
-    log.trace "Seting House setpoints to ${newHeating} and ${newCooling}"
+    debugLog(LOG.VERBOSE, "Seting House setpoints to ${newHeating} and ${newCooling}")
     houseThermostat.setHeatingSetpoint(newHeating.round(0))
     houseThermostat.setCoolingSetpoint(newCooling.round(0))
 }
@@ -450,7 +459,7 @@ private updateZones() {
         def type = childName[0]
         def value = childName[1]
         if (type == "Zone") {
-            log.info "Updating Zone ${value}: ${state.mode} ${state.opState} ${state.heatingSetpoint} ${state.coolingSetpoint}"
+            debugLog(LOG.DEBUG, "Updating Zone ${value}: ${state.mode} ${state.opState} ${state.heatingSetpoint} ${state.coolingSetpoint}")
             child.setThermostatMode(state.mode)
 			child.setOperatingState(state.opState)
 			child.setThermostatSetpoint(state.setpoint)
@@ -466,4 +475,28 @@ def getVersionInfo(){
 
 def updateVer(vChild){
     state.vChild = vChild
+}
+
+def debugLog(LogFilter, message) {
+
+    if (LogFilter >= settings.traceLevel) {
+        switch (filterLevel) {
+            case LOG_ERROR:
+                log.error "${message}"
+            break
+            case LOG_WARN:
+                log.warn "${message}"
+            break
+            case LOG_INFO:
+                log.info  "${message}"
+            break
+            case LOG_TRACE:
+                log.trace "${message}"
+            break
+            case LOG_DEBUG:
+            default:
+                log.debug "${message}"
+            break
+        }  /* end switch*/              
+    } /* end if displayEvent*/
 }
