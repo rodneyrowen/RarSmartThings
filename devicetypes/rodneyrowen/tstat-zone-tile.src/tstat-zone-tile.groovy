@@ -131,6 +131,9 @@ metadata {
 		attribute "zone", "string"
       	attribute "fanState", "string"
 		attribute "lastUpdate", "string"
+		attribute "zoneBase", "number"
+		attribute "zoneDelta", "number"
+		attribute "zoneTemporary", "number"
         
 		command "active"
 		command "inactive"
@@ -165,6 +168,9 @@ metadata {
         command "cycleFanMode"
 
         command "setTemperature", ["number"]
+        command "setZoneBase", ["number"]
+        command "setZoneDelta", ["number"]
+        command "setZoneTemporary", ["number"]
     }
     
     tiles(scale: 2) {
@@ -230,6 +236,18 @@ metadata {
             state "inactive", label:'no motion', icon: "st.motion.motion.inactive", backgroundColor: "#ffffff"
 		}
 
+		valueTile("zonebase", "device.zoneBase", width: 2, height: 2, decoration: "flat") {
+            state "default", label:'Base\n${currentValue}°F', unit: "°F"
+        }
+
+		valueTile("zonedelta", "device.zoneDelta", width: 2, height: 2, decoration: "flat") {
+            state "default", label:'Zone\n${currentValue}°F', unit: "°F"
+        }
+
+		valueTile("zonetemporary", "device.zoneTemporary", width: 2, height: 2, decoration: "flat") {
+            state "default", label:'Offset\n${currentValue}°F', unit: "°F"
+        }
+
         valueTile("refresh", "device.switch", width: 2, height: 1, decoration: "flat") {
             state "default", label: "Refresh", action: "refresh"
         }
@@ -252,28 +270,29 @@ metadata {
         main("thermostatMulti")
         details(["thermostatMulti",
             "zone", "vent", "motion",
-            "reset", "refresh","lastUpdate"
+            "reset", "refresh","lastUpdate",
+            "zonebase", "zonedelta", "zonetemporary"
         ])
     }
 }
 
 def installed() {
-    log.trace "Executing 'installed'"
+    log.debug "Executing 'installed'"
     initialize()
 }
 
 def updated() {
-    log.trace "Executing 'updated'"
+    log.debug "Executing 'updated'"
     initialize()
 }
 
 def configure() {
-    log.trace "Executing 'configure'"
+    log.debug "Executing 'configure'"
     initialize()
 }
 
 private initialize() {
-    log.trace "Executing 'initialize'"
+    log.debug "Executing 'initialize'"
 
     // for HealthCheck
     sendEvent(name: "DeviceWatch-DeviceStatus", value: "online")
@@ -283,12 +302,15 @@ private initialize() {
     sendEvent(name: "zone", value: ZONE_MODE.ACTIVE)
     sendEvent(name: "temperature", value: DEFAULT_TEMPERATURE, unit: "°F")
     sendEvent(name: "heatingSetpoint", value: DEFAULT_HEATING_SETPOINT, unit: "°F")
-    sendEvent(name: "thermostatSetpoint", value: DEFAULT_THERMOSTAT_SETPOINT, unit: "°F")
     sendEvent(name: "coolingSetpoint", value: 4, unit: "°F")
     sendEvent(name: "thermostatMode", value: DEFAULT_MODE)
     sendEvent(name: "thermostatFanMode", value: DEFAULT_FAN_MODE)
     sendEvent(name: "thermostatOperatingState", value: DEFAULT_OP_STATE)
+    sendEvent(name: "zoneBase", value: DEFAULT_THERMOSTAT_SETPOINT)
+    sendEvent(name: "zoneDelta", value: 0)
+    sendEvent(name: "zoneTemporary", value: 0)
     sendEvent(name: "fanState", value: DEFAULT_FAN_STATE)
+    updateThermostatSetpoint()
 
     state.lastUserSetpointMode = DEFAULT_PREVIOUS_STATE
     unschedule()
@@ -316,11 +338,14 @@ def refresh() {
     sendEvent(name: "thermostatMode", value: getThermostatMode())
     sendEvent(name: "thermostatFanMode", value: getFanMode())
     sendEvent(name: "thermostatOperatingState", value: getOperatingState())
-    sendEvent(name: "thermostatSetpoint", value: getThermostatSetpoint(), unit: "°F")
     sendEvent(name: "coolingSetpoint", value: getCoolingSetpoint(), unit: "°F")
     sendEvent(name: "heatingSetpoint", value: getHeatingSetpoint(), unit: "°F")
     sendEvent(name: "temperature", value: getTemperature(), unit: "°F")
+    sendEvent(name: "zoneBase", value: getZoneBase())
+    sendEvent(name: "zoneDelta", value: getZoneDelta())
+    sendEvent(name: "zoneTemporary", value: getZoneTemporary())
     sendEvent(name: "fanState", value: getFanState())
+    updateThermostatSetpoint()
 }
 
 def setFanState(String newFanState) {
@@ -468,8 +493,15 @@ def Integer getThermostatSetpoint() {
     return ts ? ts.getIntegerValue() : DEFAULT_THERMOSTAT_SETPOINT
 }
 
+def updateThermostatSetpoint() {
+    def zoneBase = getZoneBase()
+    def zoneDelta = getZoneDelta()
+    def zoneTemporary = getZoneTemporary()
+    setThermostatSetpoint(zoneBase + zoneDelta + zoneTemporary)
+}
+
 def setThermostatSetpoint(Double degreesF) {
-    def newSp = boundInt(degreesF as Integer, COOLING_SETPOINT_RANGE)
+    def newSp = boundInt(degreesF as Integer, FULL_SETPOINT_RANGE)
     log.trace "Executing 'setThermostatSetpoint' $newSp"
     sendEvent(name: "thermostatSetpoint", value: newSp)
 }
@@ -528,20 +560,14 @@ private coolDown() {
 
 private setpointUp() {
     log.trace "Executing 'setpointUp'"
-    def newSp = getThermostatSetpoint() + 1
-    setThermostatSetpoint(newSp)
-    if (getFanMode() == FAN_MODE.AUTO) {
-        sendEvent(name: "thermostatFanMode", value: FAN_MODE.AUTO)
-    }
+    def newSp = getZoneTemporary() + 1
+    setZoneTemporary(newSp)
 }
 
 private setpointDown() {
     log.trace "Executing 'setpointDown'"
-    def newSp = getThermostatSetpoint() - 1
-    setThermostatSetpoint(newSp)
-    if (getFanMode() == FAN_MODE.AUTO) {
-        sendEvent(name: "thermostatFanMode", value: FAN_MODE.AUTO)
-    }
+    def newSp = getZoneTemporary() + 1
+    setZoneTemporary(newSp)
 }
 
 // simulated temperature
@@ -558,8 +584,43 @@ private Integer getTemperature() {
 }
 
 // changes the "room" temperature for the simulation
-def setTemperature(newTemp) {
+def setTemperature(Double newTemp) {
+    log.debug "Executing 'setTemperature' ${newTemp}"
     sendEvent(name:"temperature", value: newTemp)
+}
+
+// changes the "room" temperature for the simulation
+def setZoneBase(Double newTemp) {
+    log.debug "Executing 'setZoneBase' ${newTemp}"
+    sendEvent(name:"zoneBase", value: newTemp)
+    updateThermostatSetpoint()
+}
+
+def Double setZoneBase() {
+    def value = device.currentState("zoneBase")
+
+}
+
+// changes the "room" temperature for the simulation
+def setZoneDelta(Double newTemp) {
+    log.debug "Executing 'setZoneDelta' ${newTemp}"
+    sendEvent(name:"zoneDelta", value: newTemp)
+    updateThermostatSetpoint()
+}
+
+def Double setZoneDelta() {
+    return device.currentState("zoneDelta")
+}
+
+// changes the "room" temperature for the simulation
+def setZoneTemporary(Double newTemp) {
+    log.debug "Executing 'setZoneTemporary' ${newTemp}"
+    sendEvent(name:"zoneTemporary", value: newTemp)
+    updateThermostatSetpoint()
+}
+
+def Double getZoneTemporary() {
+    return device.currentState("zoneTemporary")
 }
 
 /**
