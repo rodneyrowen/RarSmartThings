@@ -105,7 +105,7 @@ def Integer isActive() {
         df.setTimeZone(location.timeZone)
         def day = df.format(new Date())
         //Does the preference input Days, i.e., days-of-week, contain today?
-        if (!settings.days.contains(day))) {
+        if (!settings.days.contains(day)) {
             state = 0
         }
     }

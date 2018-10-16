@@ -35,6 +35,11 @@ preferences {
         section("Temperature Sensors") {
             input "inTemp", "capability.temperatureMeasurement", title: "Indoor Thermometer", multiple: true, required: true
         }
+        section("Zone Temperature Adjustments...") {
+            input "zoneAdjust", "number", title: "Temperature Adjustment:", multiple: false, required: false
+	        input "sModes", "mode", title: "Only when mode is", multiple: true, required: false
+        }
+        
     }
 }
 
@@ -63,6 +68,7 @@ def initialize() {
     state.vChild = "1.0.1"
     parent.updateVer(state.vChild)
     state.nextRunTime = 0
+    state.zoneControlMode = "active"
     state.zoneTriggerActive = false
     subscribe(inTemp, "temperature", temperatureHandler)
 
@@ -80,6 +86,7 @@ def initialize() {
     }
     
     subscribe(zoneTile, "zone", zoneActiveHandler)
+    subscribe(zoneTile, "thermostatSetpoint", zoneSetpointHandler)
 
     log.debug "Installed with settings: ${settings}"
 
@@ -107,7 +114,7 @@ def temperatureHandler(evt) {
                 log.debug "got Null temp"
             }
         }
-        average = sum/count
+        average = Math.round((sum/count)*10.0)/10.0
     } else {
 	    log.debug "No temp Sensors available set average to 60"
     	average = 60.0
@@ -122,19 +129,18 @@ def temperatureHandler(evt) {
 		zoneTile.setTemperature(average)
    	}
 }
-@Field final Map      ZONE_MODE = [
-    INACTIVE:   "inactive",
-    ACTIVE:  "active",
-    AUTO:  "auto"
-]
 
 def zoneActiveHandler(evt) {
-    def zoneTile = getChildDevice("${app.id}")
-	if (zoneTile) {
-		def zoneState = zoneTile.getCurrentValue("zone")
-        state.isActive = zoneState
-        log.debug "Got Zone State: ${zoneState}"
-   	}
+	log.debug "Zone Control Mode Event: ${evt.name}, ${evt.value}"
+    state.zoneControlMode = evt.value
+}
+
+def zoneSetpointHandler(evt) {
+	log.debug "Setpoint Event: ${evt.name}, ${evt.value}"
+   	state.setPoint = evt.value
+    // Cause the main app to process the data again
+    parent.zonePoll("poll")
+
 }
 
 def getTemperature() {
@@ -144,20 +150,45 @@ def getTemperature() {
 
 def Double getRoomDelta() {
     temperatureHandler()
-	return state.setPoint - state.temperature
+    Double zoneDelta = 0
+    log.debug "getRoomDelta: ${state.setPoint} ${state.temperature} ${isActive()}"
+    if (state.setPoint && state.temperature && isActive()) {
+        def sp = state.setPoint as Double
+    	zoneDelta = sp - state.temperature
+        log.debug "getRoomDelta Value: ${zoneDelta}"
+        if (zoneDelta < -10) {
+            zoneDelta = -10
+        } else if (zoneDelta > 10) {
+            zoneDelta = 10
+        } 
+    }
+    log.debug "getRoomDelta returns: ${zoneDelta}"
+	return zoneDelta
+}
+
+def Double getZoneAdjustment() {
+	def zoneAdj = 0
+    if (settings.zoneAdjust)
+    {
+        if (settings.sModes) {
+            if (settings.sModes.contains(location.mode)) {
+                zoneAdj = settings.zoneAdjust
+            }
+        } else {
+        	zoneAdj = settings.zoneAdjust
+        }
+    }
+    log.trace "Executing 'getZoneAdjustment' returned ${zoneAdj} with adj=${settings.zoneAdjust} and modes=${settings.sModes}"
+	return zoneAdj
 }
 
 def Integer isActive() {
-    def zoneTile = getChildDevice("${app.id}")
-	if (zoneTile) {
-		def zoneState = zoneTile.getCurrentValue("zone")
-        log.debug "Check Zone Active: ${zoneState}"
-        if (zoneState == "inactive") {
-            return 0
-        } else {
-            return 1
-        }
-   	}
+    //log.debug "Check Zone Active: ${state.zoneControlMode}"
+    if (state.zoneControlMode == "inactive") {
+        return 0
+    } else {
+        return 1
+    }
 }
 
 def activeHandler(evt){
@@ -187,10 +218,9 @@ def setOperatingState(String operatingState) {
 
 def setThermostatSetpoint(Double degreesF) {
     log.trace "Executing 'setThermostatSetpoint' $degreesF"
-    state.setPoint = degreesF
     def zoneTile = getChildDevice("${app.id}")
 	if (zoneTile) {
-		zoneTile.setThermostatSetpoint(degreesF)
+		zoneTile.setZoneBase(degreesF)
    	}
 }
 
@@ -200,6 +230,7 @@ def setHeatingSetpoint(Double degreesF) {
     def zoneTile = getChildDevice("${app.id}")
 	if (zoneTile) {
 		zoneTile.setHeatingSetpoint(degreesF)
+        zoneTile.setZoneDelta(getZoneAdjustment())
    	}
 }
 

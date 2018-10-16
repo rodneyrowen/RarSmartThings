@@ -271,7 +271,7 @@ private double getTemparture() {
         sum   += sensor.currentTemperature
     }
 
-    average = sum/count
+    average = Math.round((sum/count)*10.0)/10.0
     return average
 }
 
@@ -288,9 +288,16 @@ def poll() {
     evaluateState()
 }
 
+def zonePoll(what){
+    debugLog(LOG.DEBUG, "zonePoll ${what}")
+    if (what == "poll") {
+	    evaluateState()
+    }
+}
+
 private evaluateMode(def newMode) {
 	//if (newMode != state.mode) {
-        debugLog(LOG.TRACE, "Set mode: ${newMode}")
+        debugLog(LOG.lRACE, "Set mode: ${newMode}")
         switch (newMode) {
             case MODE.AUTO:
                 changeMode(MODE.AUTO, OP_STATE.HEATING, SETPOINT_TYPE.HEATING)
@@ -324,7 +331,14 @@ private evaluateChildren() {
 	def bestState = 0
     def coolingSet = settings.coolingTemp
     def heatingSet = settings.heatingTemp
-    def biggestDelta = 0
+    
+	def tstatThermostat = getChildDevice("${app.id}")
+    state.temperature = getTemparture()
+    tstatThermostat.setTemperature(state.temperature)
+
+	// Want current state before we make any adjustments
+    state.zoneMaxDelta = state.setpoint - state.temperature
+    
     childApps.each {child ->
         def childName = child.label.split('-')
         def type = childName[0]
@@ -341,10 +355,19 @@ private evaluateChildren() {
             }
         } else if (type == "Zone") {
             debugLog(LOG.DEBUG, "Evalute Zone type for: ${value}")
-            def active = child.isActive
+            def active = child.isActive()
             if (active) {
-                def tempDelta = child.getRoomDelta()
-                debugLog(LOG.TRACE, "Zone ${value} returned ${tempDelta}")
+                def zoneDelta = child.getRoomDelta()
+                if (state.setpointType == SETPOINT_TYPE.COOLING) {
+    				if (tempDelta > state.zoneMaxDelta) {
+                    	state.zoneMaxDelta = zoneDelta
+                    }
+                } else {
+    				if (tempDelta < state.zoneMaxDelta) {
+                    	state.zoneMaxDelta = zoneDelta
+                    }
+                }
+                debugLog(LOG.DEBUG, "Zone ${value} returned ${zoneDelta}  maxDelta ${state.zoneMaxDelta}")
             }
         } else {
             debugLog(LOG.WARN, "Unknown Child type: ${child.label}")
@@ -355,6 +378,9 @@ private evaluateChildren() {
     {
         changeSchedule(scheduleName, coolingSet, heatingSet)
     }
+    
+    debugLog(LOG.DEBUG, "Max Zone Delta = ${state.zoneMaxDelta}")
+
 }
 
 
@@ -427,17 +453,13 @@ private String determineHouseMode(mode) {
 }
 
 private doProcessing() {
-	def tstatThermostat = getChildDevice("${app.id}")
-    def temperature = getTemparture()
-    tstatThermostat.setTemperature(temperature.round(1))
-
     // Read the inputs to the processing
     def houseMode = houseThermostat.currentValue('thermostatMode')
     def houseTemp = houseThermostat.currentValue('temperature')
     def houseSetpoint = houseThermostat.currentValue('thermostatSetpoint')
     def houseCooling = houseThermostat.currentValue('coolingSetpoint')
     def houseHeating = houseThermostat.currentValue('heatingSetpoint')
-    debugLog(LOG.INFO, "Evalutate: ${mode} temp ${temperature}/${state.setpoint} house ${houseTemp}/${houseSetpoint}(${houseHeating}-${houseCooling})")
+    debugLog(LOG.INFO, "Evalutate: ${mode} temp ${state.temperature}/${state.setpoint} house ${houseTemp}/${houseSetpoint}(${houseHeating}-${houseCooling})")
 
     def neededHouseMode = determineHouseMode(state.mode)
     if (houseMode != neededHouseMode) {
@@ -445,12 +467,13 @@ private doProcessing() {
         houseThermostat.setThermostatMode(neededHouseMode)
     }
 
-	def tempDelta = temperature - houseTemp
-    def newHeating = state.heatingSetpoint + tempDelta
-    def newCooling = state.coolingSetpoint + tempDelta
+	def houseDelta = houseSetpoint - houseTemp
+    def setpointAdj = state.zoneMaxDelta = houseDelta
+    def newHeating = state.heatingSetpoint + setpointAdj
+    def newCooling = state.coolingSetpoint + setpointAdj
     debugLog(LOG.VERBOSE, "Seting House setpoints to ${newHeating} and ${newCooling}")
-    houseThermostat.setHeatingSetpoint(newHeating.round(0))
-    houseThermostat.setCoolingSetpoint(newCooling.round(0))
+    houseThermostat.setHeatingSetpoint(Math.round(newHeating))
+    houseThermostat.setCoolingSetpoint(Math.round(newCooling))
 }
 
 private updateZones() {
@@ -470,17 +493,18 @@ private updateZones() {
 }
 
 def getVersionInfo(){
-	return "Versions:\n\tZone Motion Manager: ${state.vParent ?: "No data available yet."}\n\tZone Configuration: ${state.vChild ?: "No data available yet."}"
+	return "Version Tstat:\n\tTsat Master: ${state.vParent ?: "No data available yet."}\n\tZone Version: ${state.vChild ?: "No data available yet."}"
 }
 
 def updateVer(vChild){
     state.vChild = vChild
 }
 
+
 def debugLog(LogFilter, message) {
 
     if (LogFilter >= settings.traceLevel) {
-        switch (filterLevel) {
+        switch (LogFilter) {
             case LOG_ERROR:
                 log.error "${message}"
             break
