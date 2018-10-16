@@ -310,6 +310,8 @@ private initialize() {
     sendEvent(name: "zoneDelta", value: 0)
     sendEvent(name: "zoneTemporary", value: 0)
     sendEvent(name: "fanState", value: DEFAULT_FAN_STATE)
+    setZoneBase(65);
+    setZoneDelta(1);
     updateThermostatSetpoint()
 
     state.lastUserSetpointMode = DEFAULT_PREVIOUS_STATE
@@ -345,6 +347,8 @@ def refresh() {
     sendEvent(name: "zoneDelta", value: getZoneDelta())
     sendEvent(name: "zoneTemporary", value: getZoneTemporary())
     sendEvent(name: "fanState", value: getFanState())
+    setZoneBase(getZoneBase());
+    setZoneDelta(getZoneDelta());
     updateThermostatSetpoint()
 }
 
@@ -566,7 +570,7 @@ private setpointUp() {
 
 private setpointDown() {
     log.trace "Executing 'setpointDown'"
-    def newSp = getZoneTemporary() + 1
+    def newSp = getZoneTemporary() - 1
     setZoneTemporary(newSp)
 }
 
@@ -596,9 +600,8 @@ def setZoneBase(Double newTemp) {
     updateThermostatSetpoint()
 }
 
-def Double setZoneBase() {
-    def value = device.currentState("zoneBase")
-
+def Double getZoneBase() {
+    return device.currentValue("zoneBase") ?: 60
 }
 
 // changes the "room" temperature for the simulation
@@ -608,8 +611,8 @@ def setZoneDelta(Double newTemp) {
     updateThermostatSetpoint()
 }
 
-def Double setZoneDelta() {
-    return device.currentState("zoneDelta")
+def Double getZoneDelta() {
+    return device.currentValue("zoneDelta") ?: 0
 }
 
 // changes the "room" temperature for the simulation
@@ -620,7 +623,7 @@ def setZoneTemporary(Double newTemp) {
 }
 
 def Double getZoneTemporary() {
-    return device.currentState("zoneTemporary")
+    return device.currentValue("zoneTemporary") ?: 0
 }
 
 /**

@@ -82,7 +82,11 @@ import groovy.transform.Field
 
 metadata {
     // Automatically generated. Make future change here.
-    definition (name: "Tstat Thermostat", namespace: "rodneyrowen", author: "rrowen") {
+    definition (name: "Tstat Thermostat",
+                namespace: "rodneyrowen",
+                author: "rrowen",
+                parent: "rodneyrowen:Tstat Master")
+    {
     capability "Sensor"
     capability "Actuator"
     capability "Health Check"
@@ -318,6 +322,9 @@ def refresh() {
     sendEvent(name: "coolingSetpoint", value: getCoolingSetpoint(), unit: "°F")
     sendEvent(name: "heatingSetpoint", value: getHeatingSetpoint(), unit: "°F")
     sendEvent(name: "temperature", value: getTemperature(), unit: "°F")
+    // Cause the main app to process the data again
+    parent.poll()
+    
 }
 
 // Thermostat mode
