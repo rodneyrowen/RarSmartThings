@@ -125,7 +125,9 @@ def main(){
             }
             section("House Thermostat") {
                 input "houseThermostat", "capability.thermostat", title: "House Thermostat"
+                input name: "houseDisable", title: "Disable Tstat Control", type: "bool", defaultValue: false, required: true
             }
+
             section("Debug") {
                 input("traceLevel", "number",title: "3=Normal,2=Debug,1=Verbose",  range: "1..3", defaultValue: 1,
                     description: "optional" )  
@@ -223,8 +225,11 @@ def initialize() {
     runEvery5Minutes(poll)
 
     // save defaults to state
-    debugLog(LOG.DEBUG, "Save defaults")
-    changeMode(MODE.OFF, OP_STATE.IDLE, SETPOINT_TYPE.OFF)
+    // Initialize the mode based on the house thermostats current mode
+    def houseMode = houseThermostat.currentValue('thermostatMode')
+    debugLog(LOG.DEBUG, "Save defaults and set thermostat to house mode ${houseMode}")
+    evaluateMode(houseMode)
+
     changeSchedule("Default", settings.coolingTemp, settings.heatingTemp) 
 
 }
@@ -324,6 +329,9 @@ private evaluateState() {
     evaluateChildren()
     doProcessing()
     updateZones()
+    // Indicate we ran the last update
+	def tstatThermostat = getChildDevice("${app.id}")
+    tstatThermostat.updateLastUpdate()
 }
 
 private evaluateChildren() {
@@ -334,6 +342,7 @@ private evaluateChildren() {
     
 	def tstatThermostat = getChildDevice("${app.id}")
     state.temperature = getTemparture()
+    state.zoneTemp = state.temperature as Double;
     tstatThermostat.setTemperature(state.temperature)
 
 	// Want current state before we make any adjustments
@@ -355,16 +364,18 @@ private evaluateChildren() {
             }
         } else if (type == "Zone") {
             debugLog(LOG.DEBUG, "Evalute Zone type for: ${value}")
-            def active = child.isActive()
-            if (active) {
+            def needsHvacOn = child.requiresHvac()
+            if (needsHvacOn) {
                 def zoneDelta = child.getRoomDelta()
                 if (state.setpointType == SETPOINT_TYPE.COOLING) {
     				if (tempDelta > state.zoneMaxDelta) {
                     	state.zoneMaxDelta = zoneDelta
+                        state.zoneTemp = child.getTemperature
                     }
                 } else {
     				if (tempDelta < state.zoneMaxDelta) {
                     	state.zoneMaxDelta = zoneDelta
+                        state.zoneTemp = child.getTemperature
                     }
                 }
                 debugLog(LOG.DEBUG, "Zone ${value} returned ${zoneDelta}  maxDelta ${state.zoneMaxDelta}")
@@ -461,19 +472,41 @@ private doProcessing() {
     def houseHeating = houseThermostat.currentValue('heatingSetpoint')
     debugLog(LOG.INFO, "Evalutate: ${mode} temp ${state.temperature}/${state.setpoint} house ${houseTemp}/${houseSetpoint}(${houseHeating}-${houseCooling})")
 
+	// Treat a house mode of Emergency heat like heat
+	if (houseMode == MODE.EHEAT) {
+    	houseMode = MODE.HEAT
+	    debugLog(LOG.DEBUG, "Convert EHEAT Mode to ${houseMode}")
+    }
+    
     def neededHouseMode = determineHouseMode(state.mode)
     if (houseMode != neededHouseMode) {
-	    debugLog(LOG.DEBUG, "Seting House Mode to ${neededHouseMode}")
-        houseThermostat.setThermostatMode(neededHouseMode)
+    	if (!houseDisable) {
+            debugLog(LOG.DEBUG, "Setting House Mode to ${neededHouseMode}")
+        	houseThermostat.setThermostatMode(neededHouseMode)
+        } else {
+            debugLog(LOG.DEBUG, "(Disabled) Setting House Mode to ${neededHouseMode}")
+        }
     }
 
 	def houseDelta = houseSetpoint - houseTemp
-    def setpointAdj = state.zoneMaxDelta = houseDelta
-    def newHeating = state.heatingSetpoint + setpointAdj
-    def newCooling = state.coolingSetpoint + setpointAdj
-    debugLog(LOG.VERBOSE, "Seting House setpoints to ${newHeating} and ${newCooling}")
-    houseThermostat.setHeatingSetpoint(Math.round(newHeating))
-    houseThermostat.setCoolingSetpoint(Math.round(newCooling))
+    def setpointAdj = state.zoneMaxDelta - houseDelta
+    if (setpointAdj < -10) {
+        setpointAdj = -10
+    } else if (setpointAdj > 10) {
+        setpointAdj = 10
+    } 
+
+    def newHeating = Math.round(houseHeating + setpointAdj)
+    def newCooling = Math.round(houseCooling + setpointAdj)
+   	if (!houseDisable) {
+        debugLog(LOG.VERBOSE, "Setting House setpoints to ${newHeating}/${state.heatingSetpoint} and ${newCooling}/${state.coolingSetpoint}")
+        if (newHeating != houseHeating) {
+        	houseThermostat.setHeatingSetpoint(newHeating)
+        	houseThermostat.setCoolingSetpoint(newCooling)
+        }
+    } else {
+        debugLog(LOG.VERBOSE, "(Disabled) Setting House setpoints to ${newHeating}/${state.heatingSetpoint} and ${newCooling}/${state.coolingSetpoint}")
+    }
 }
 
 private updateZones() {

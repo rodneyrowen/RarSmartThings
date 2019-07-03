@@ -14,7 +14,16 @@
 	The software is provided without warranty and the software author/license owner cannot be held liable for damages.        
         
 */
- 
+import groovy.transform.Field
+
+// enummaps
+@Field final Map VENT_STATE = [
+    OFF:   "off",
+    ON:    "on",
+    AUTO_ON: "auto",
+    AUTO_OFF: "circulate",
+]
+
 definition(
     name: "Tstat Zone",
     namespace: "rodneyrowen",
@@ -34,6 +43,10 @@ preferences {
 		}
         section("Temperature Sensors") {
             input "inTemp", "capability.temperatureMeasurement", title: "Indoor Thermometer", multiple: true, required: true
+        }
+        section("Smart Vents..."){
+            input "vents", "capability.switch", title: "Vents", multiple: true, required: false
+            input "ventClosedLevel", "number", title: "Closed Level?", defaultValue: 25, multiple: false, required: false
         }
         section("Zone Temperature Adjustments...") {
             input "zoneAdjust", "number", title: "Temperature Adjustment:", multiple: false, required: false
@@ -87,16 +100,19 @@ def initialize() {
     
     subscribe(zoneTile, "zone", zoneActiveHandler)
     subscribe(zoneTile, "thermostatSetpoint", zoneSetpointHandler)
+    subscribe(zoneTile, "thermostatFanMode", zoneVentModeHandler)
 
     log.debug "Installed with settings: ${settings}"
 
-	state.temperature = 0
+	state.tempOffset = 0
+    state.temperature = 0
     runEvery5Minutes(poll)
 }
 
 def poll() {
 	// Periodic poller to read the temperature and adjust the vents
     temperatureHandler()
+    processVents()
 }
 
 def temperatureHandler(evt) {
@@ -130,17 +146,99 @@ def temperatureHandler(evt) {
    	}
 }
 
+def processVents() {
+	if (vents) {
+    	if (isActive()) {
+            if ((state.ventMode == VENT_STATE.AUTO_ON) || (state.ventMode == VENT_STATE.AUTO_OFF)) {
+                def zoneTemp = state.temperature as Double
+                def zoneSetpoint = state.setPoint as Double
+                if (zoneTemp > zoneSetpoint) {
+                    // Set vents to closed
+                    setVents(VENT_STATE.AUTO_OFF);
+                } else {
+                    // Set vents to open
+                    setVents(VENT_STATE.AUTO_ON);
+                }
+            } else {
+                // Leave whatever way was set previously
+                setVents(state.ventMode);
+            }
+            log.debug "processVents -> ${state.ventMode} ${state.temperature} ${state.setPoint}"
+        } else {
+            // FORCE OFF if in Auto Mode
+            if (state.ventMode == VENT_STATE.AUTO_ON) {
+                // Set vents to closed
+                setVents(VENT_STATE.AUTO_OFF);
+            }
+	        log.debug "processVents -> Inactive zone - ${state.ventMode}"
+        }
+    }
+}
+
+def setVents(newState) {
+    def zoneTile = getChildDevice("${app.id}")
+	if (newState != state.ventMode) {
+    	switch (newState) {
+        	case VENT_STATE.AUTO_ON:
+        		vents.setLevel(100)
+                if (zoneTile) {
+                    zoneTile.setThermostatFanMode(newState)
+                }
+                break;
+        	case VENT_STATE.AUTO_OFF:
+        		vents.setLevel(ventClosedLevel)
+                if (zoneTile) {
+                    zoneTile.setThermostatFanMode(newState)
+                }
+                break;
+        	case VENT_STATE.ON:
+        		vents.setLevel(100)
+                break;
+        	case VENT_STATE.OFF:
+            default:
+        		vents.setLevel(ventClosedLevel)
+            	break;
+       }
+       state.ventMode = newState
+    }
+}
+
 def zoneActiveHandler(evt) {
 	log.debug "Zone Control Mode Event: ${evt.name}, ${evt.value}"
     state.zoneControlMode = evt.value
+    setThermostatMode(state.mode)
+    setOperatingState(state.opState)
+    processVents()
+}
+
+def setZoneActive(newMode) {
+	log.debug "Set Zone Control Mode: ${newMode}"
+    state.zoneControlMode = newMode
+    setThermostatMode(state.mode)
+    setOperatingState(state.opState)
+    processVents()
 }
 
 def zoneSetpointHandler(evt) {
-	log.debug "Setpoint Event: ${evt.name}, ${evt.value}"
-   	state.setPoint = evt.value
+   	state.setPoint = evt.value as Double
+    def zoneAdj = getZoneAdjustment()
+    state.tempOffset = state.setPoint - (state.zoneBase + zoneAdj)
+	log.debug "Setpoint Event: ${evt.name}, ${evt.value} - new Offset ${state.tempOffset}"
     // Cause the main app to process the data again
     parent.zonePoll("poll")
 
+}
+
+def zoneVentModeHandler(evt) {
+   	state.ventMode = evt.value
+	log.debug "Vent Mode Event: ${evt.name}, ${state.ventMode}"
+	processVents()
+}
+
+def setZoneVentMode(mode) {
+   	state.ventMode = mode
+	log.debug "Set Vent Mode: ${state.ventMode}"
+	processVents()
 }
 
 def getTemperature() {
@@ -152,9 +250,12 @@ def Double getRoomDelta() {
     temperatureHandler()
     Double zoneDelta = 0
     log.debug "getRoomDelta: ${state.setPoint} ${state.temperature} ${isActive()}"
+    def zoneAdj = getZoneAdjustment()
+    def localSetupPoint = 0  //state.zoneBase + zoneAdj + state.tempOffset
+    log.debug "getRoomDelta: Zone ${localSetupPoint} = Base ${state.zoneBase} Adj ${zoneAdj} Off ${state.tempOffset}"
     if (state.setPoint && state.temperature && isActive()) {
-        def sp = state.setPoint as Double
-    	zoneDelta = sp - state.temperature
+        def sp = state.setPoint as Double 
+        zoneDelta = Math.round((sp - state.temperature)*10.0)/10.0
         log.debug "getRoomDelta Value: ${zoneDelta}"
         if (zoneDelta < -10) {
             zoneDelta = -10
@@ -162,7 +263,6 @@ def Double getRoomDelta() {
             zoneDelta = 10
         } 
     }
-    log.debug "getRoomDelta returns: ${zoneDelta}"
 	return zoneDelta
 }
 
@@ -191,6 +291,10 @@ def Integer isActive() {
     }
 }
 
+def Integer requiresHvac() {
+    return 0
+}
+
 def activeHandler(evt){
     log.trace "active handler fired via [${evt.displayName}] UTC: ${evt.date.format("yyyy-MM-dd HH:mm:ss")}"
 }
@@ -199,25 +303,39 @@ def inactiveHandler(evt){
 }
 
 def setThermostatMode(String value) {
-    log.trace "Executing 'setThermostatMode' $value"
     state.mode = value
     def zoneTile = getChildDevice("${app.id}")
 	if (zoneTile) {
-		zoneTile.setThermostatMode(value)
+    	if (isActive()) {
+		    log.trace "Executing 'setThermostatMode' $value"
+        	zoneTile.setThermostatMode(value)
+        } else {
+        	// Force into idle state
+		    log.trace "Executing 'setThermostatMode' force Off"
+        	zoneTile.setThermostatMode("off")
+        }
+		
    	}
 }
 
 def setOperatingState(String operatingState) {
-    log.trace "Executing 'setOperatingState' $operatingState"
     state.opState = operatingState
     def zoneTile = getChildDevice("${app.id}")
 	if (zoneTile) {
-		zoneTile.setOperatingState(operatingState)
+    	if (isActive()) {
+		    log.trace "Executing 'setOperatingState' $operatingState"
+        	zoneTile.setOperatingState(operatingState)
+        } else {
+        	// Force into idle state
+		    log.trace "Executing 'setOperatingState' force idle"
+        	zoneTile.setOperatingState("idle")
+        }
    	}
 }
 
 def setThermostatSetpoint(Double degreesF) {
-    log.trace "Executing 'setThermostatSetpoint' $degreesF"
+    log.trace "Executing 'setZoneBase' $degreesF"
+    state.zoneBase = degreesF
     def zoneTile = getChildDevice("${app.id}")
 	if (zoneTile) {
 		zoneTile.setZoneBase(degreesF)
@@ -226,7 +344,7 @@ def setThermostatSetpoint(Double degreesF) {
 
 def setHeatingSetpoint(Double degreesF) {
     log.trace "Executing 'setHeatingSetpoint' $degreesF"
-    state.heatinfSetpoint = degreesF
+    state.heatingSetpoint = degreesF
     def zoneTile = getChildDevice("${app.id}")
 	if (zoneTile) {
 		zoneTile.setHeatingSetpoint(degreesF)
@@ -236,7 +354,7 @@ def setHeatingSetpoint(Double degreesF) {
 
 def setCoolingSetpoint(Double degreesF) {
     log.trace "Executing 'setCoolingSetpoint' $degreesF"
-    state.heatinfSetpoint = degreesF
+    state.coolingSetpoint = degreesF
     def zoneTile = getChildDevice("${app.id}")
 	if (zoneTile) {
 		zoneTile.setCoolingSetpoint(degreesF)
