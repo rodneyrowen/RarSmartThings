@@ -126,6 +126,7 @@ metadata {
 
     command "setTemperature", ["number"]
 
+	attribute "lastUpdate", "string"
     attribute "schedule", "string"
     }
 
@@ -229,6 +230,10 @@ metadata {
             state "default", label: '${currentValue}'
         }
 
+		valueTile("lastUpdate", "device.lastUpdate", width: 2, height: 2, decoration: "flat") {
+			state "default", label:'Last update:\n${currentValue}'
+		}
+
         valueTile("refresh", "device.switch", width: 2, height: 2, decoration: "flat") {
             state "default", label: "Refresh", action: "refresh"
         }
@@ -243,7 +248,7 @@ metadata {
             "heatingSetpoint",
             "coolingSetpoint",
             "fanMode",
-            "refresh", "reset"
+            "refresh", "lastUpdate"
         ])
 //            "heatDown", "heatUp",
 //            "mode",
@@ -290,7 +295,7 @@ private initialize() {
     sendEvent(name: "thermostatFanMode", value: DEFAULT_FAN_MODE)
     sendEvent(name: "thermostatOperatingState", value: DEFAULT_OP_STATE)
     sendEvent(name: "schedule", value: "Default")
-
+	updateLastUpdate()
     state.lastUserSetpointMode = DEFAULT_PREVIOUS_STATE
     unschedule()
 }
@@ -322,9 +327,15 @@ def refresh() {
     sendEvent(name: "coolingSetpoint", value: getCoolingSetpoint(), unit: "°F")
     sendEvent(name: "heatingSetpoint", value: getHeatingSetpoint(), unit: "°F")
     sendEvent(name: "temperature", value: getTemperature(), unit: "°F")
+    updateLastUpdate()
     // Cause the main app to process the data again
-    parent.poll()
+    parent.zonePoll("poll")
     
+}
+
+def updateLastUpdate() {
+	def timeStamp = new Date().format("yyyy MMM dd EEE h:mm:ss a", location.timeZone)
+	sendEvent(name: "lastUpdate", value: timeStamp)
 }
 
 // Thermostat mode

@@ -83,7 +83,7 @@ import groovy.transform.Field
 
 // config - TODO: move these to a pref page
 @Field List SUPPORTED_MODES = [MODE.OFF, MODE.HEAT, MODE.AUTO, MODE.COOL]
-@Field List SUPPORTED_FAN_MODES = [FAN_MODE.OFF, FAN_MODE.ON, FAN_MODE.AUTO, FAN_MODE.CIRCULATE]
+@Field List SUPPORTED_FAN_MODES = [FAN_MODE.OFF, FAN_MODE.AUTO, FAN_MODE.CIRCULATE, FAN_MODE.ON]
 
 @Field final Float    THRESHOLD_DEGREES = 1.0
 @Field final Integer  SIM_HVAC_CYCLE_SECONDS = 15
@@ -117,7 +117,7 @@ import groovy.transform.Field
 
 metadata {
     // Automatically generated. Make future change here.
-	definition (name: "Tstat Zone Tile", namespace: "rodneyrowen", author: "rrowen") {
+	definition (name: "Tstat Zone Tile", namespace: "rodneyrowen", author: "rrowen", parent: "rodneyrowen:Tstat Zone") {
         capability "Sensor"
         capability "Actuator"
         capability "Health Check"
@@ -129,15 +129,14 @@ metadata {
         capability "Refresh"
 
 		attribute "zone", "string"
-      	attribute "fanState", "string"
 		attribute "lastUpdate", "string"
 		attribute "zoneBase", "number"
 		attribute "zoneDelta", "number"
 		attribute "zoneTemporary", "number"
         
-		command "active"
-		command "inactive"
-        command "zoneauto"
+        command "zoneAuto"
+        command "zoneActive"
+        command "zoneInactive"
 
 		command "setThermostatMode", ["string"]
 		command "off"
@@ -210,18 +209,18 @@ metadata {
             state "default", label: '${currentValue}', backgroundColor:"#cccccc"
         }
 
-		standardTile("fanMode", "device.thermostatFanMode", width: 2, height: 2, decoration: "flat") {
-            state "off",       action: "fanOn", label: "OFF", nextState: "on", icon: "st.thermostat.fan-off", backgroundColor: "#FFFFFF", defaultState: true
-            state "auto",      action: "fanOff", label: "Auto", nextState: "off", icon: "st.thermostat.fan-auto", backgroundColor: "#00a0dc"
-            state "on",        action: "fanOff", label: "ON", nextState: "off", icon: "st.thermostat.fan-on", backgroundColor: "#00a0dc"
-            state "circulate", action: "fanOff", label: "TIMED", nextState: "off", icon: "st.thermostat.fan-circulate", backgroundColor: "#00a0dc"
+		standardTile("ventMode", "device.thermostatFanMode", width: 2, height: 2, decoration: "flat") {
+            state "off",       action: "fanAuto", nextState: "auto", icon: "st.vents.vent-closed", backgroundColor: "#FFFFFF", defaultState: true
+            state "auto",      action: "fanOn", label: "AUTO", nextState: "on", icon: "st.vents.vent-open-text", backgroundColor: "#00a0dc"
+            state "circulate", action: "fanOn", label: "AUTO", nextState: "on", icon: "st.vents.vent-closed", backgroundColor: "#00a0dc"
+            state "on",        action: "fanOff", nextState: "off", icon: "st.vents.vent-open-text", backgroundColor: "#00a0dc"
             state "updating", label: "Working", backgroundColor: "#00a0dc"
         }
 
         valueTile("zone", "device.zone", width: 2, height: 2, decoration: "flat") {
-            state "active", label:'Active', icon: "st.motion.motion.active", action: "zoneauto", backgroundColor: "#53a7c0"
-            state "inactive", label:'Inactive', icon: "st.motion.motion.inactive", action: "active", backgroundColor: "#ffffff"
-            state "auto", label:'Auto', icon: "st.motion.motion.active", action: "inactive", backgroundColor: "#53a7c0"
+            state "active", label:'Active', icon: "st.motion.motion.active", action: "zoneInactive", backgroundColor: "#53a7c0"
+            state "inactive", label:'Inactive', icon: "st.motion.motion.inactive", action: "zoneActive", backgroundColor: "#ffffff"
+            state "auto", label:'Auto', icon: "st.motion.motion.active", action: "zoneInactive", backgroundColor: "#53a7c0"
 		}
 
         valueTile("vent", "device.switch", width: 2, height: 2, canChangeIcon: false) {
@@ -269,7 +268,7 @@ metadata {
 
         main("thermostatMulti")
         details(["thermostatMulti",
-            "zone", "vent", "motion",
+            "zone", "ventMode", "motion",
             "reset", "refresh","lastUpdate",
             "zonebase", "zonedelta", "zonetemporary"
         ])
@@ -346,39 +345,33 @@ def refresh() {
     sendEvent(name: "zoneBase", value: getZoneBase())
     sendEvent(name: "zoneDelta", value: getZoneDelta())
     sendEvent(name: "zoneTemporary", value: getZoneTemporary())
-    sendEvent(name: "fanState", value: getFanState())
     setZoneBase(getZoneBase());
     setZoneDelta(getZoneDelta());
     updateThermostatSetpoint()
 }
 
-def setFanState(String newFanState) {
-    log.trace "Executing 'setFanState' $newFanState"
-     sendEvent(name: "fanState", value: newFanState)
-}
-
 def setLastUpdate() {
-    log.trace "Executing 'setFanState' $newFanState"
-     sendEvent(name: "fanState", value: newFanState)
+	def timeStamp = new Date().format("yyyy MMM dd EEE h:mm:ss a", location.timeZone)
+    log.trace "Executing 'setLastUpdate' ${timeStamp}"
+	sendEvent(name: "lastUpdate", value: timeStamp)
 }
 
-def active() {
+def zoneActive() {
     log.trace "Executing 'active'"
+    parent.setZoneActive(ZONE_MODE.ACTIVE)
     sendEvent(name: "zone", value: ZONE_MODE.ACTIVE)
 }
 
-def inactive() {
+def zoneInactive() {
     log.trace "Executing 'inactive'"
+    parent.setZoneActive(ZONE_MODE.INACTIVE)
     sendEvent(name: "zone", value: ZONE_MODE.INACTIVE)
 }
 
-def zoneauto() {
+def zoneAuto() {
     log.trace "Executing 'zoneAuto'"
+    parent.setZoneActive(ZONE_MODE.AUTO)
     sendEvent(name: "zone", value: ZONE_MODE.AUTO)
-}
-
-private String getFanState() {
-    return device.currentValue("fanState") ?: DEFAULT_FAN_STATE
 }
 
 // Thermostat mode
@@ -387,7 +380,7 @@ private String getThermostatMode() {
 }
 
 def setThermostatMode(String value) {
-    log.trace "Executing 'setThermostatMode' $value"
+    log.trace "Executing 'setThermostatMode' ${value}"
     if (value in SUPPORTED_MODES) {
         sendEvent(name: "thermostatMode", value: value)
     } else {
@@ -434,6 +427,7 @@ private String getFanMode() {
 def setThermostatFanMode(String value) {
     if (value in SUPPORTED_FAN_MODES) {
 	    log.trace "Set Fan Mode: $value"
+	    parent.setZoneVentMode(value)
         sendEvent(name: "thermostatFanMode", value: value)
     } else {
         log.warn "'$value' is not a supported fan mode. Please set one of ${SUPPORTED_FAN_MODES.join(', ')}"
@@ -484,7 +478,8 @@ private String getOperatingState() {
 }
 
 def setOperatingState(String operatingState) {
-     sendEvent(name: "thermostatOperatingState", value: operatingState)
+    log.debug "Executing 'setOperatingState' ${operatingState}"
+    sendEvent(name: "thermostatOperatingState", value: operatingState)
 	// update last time stamp
 	def timeStamp = new Date().format("yyyy MMM dd EEE h:mm:ss a", location.timeZone)
 	sendEvent(name: "lastUpdate", value: timeStamp)
