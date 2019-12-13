@@ -165,7 +165,7 @@ def processVents() {
         def zoneDelta = getRoomDelta()
         log.debug "processVents -> Mode: ${state.ventMode}: ${zoneDelta}=${state.setPoint}-${state.temperature}"
         if ((state.ventMode == VENT_STATE.AUTO_ON) || (state.ventMode == VENT_STATE.AUTO_OFF)) {
-            if (zoneDelta> 0) {
+            if (zoneDelta < 0) {
                 setVents(VENT_STATE.AUTO_ON)
             } else {
                 setVents(VENT_STATE.AUTO_OFF)
