@@ -57,7 +57,7 @@ preferences {
             input "ventClosedLevel", "number", title: "Closed Level?", defaultValue: 25, multiple: false, required: false
         }
         section("Zone Temperature Adjustments...") {
-            input "zoneAdjust", "number", title: "Temperature Adjustment:", multiple: false, required: false
+            input "zoneAdjust", "number", title: "Temperature Adjustment:", defaultValue: 0, multiple: false, required: true
 	        input "sModes", "mode", title: "Only when mode is", multiple: true, required: false
         }
         section("Inactive Adjustments...") {
@@ -244,6 +244,10 @@ def setZoneActive(newMode) {
     setThermostatMode(state.mode)
     setOperatingState(state.opState)
     processVents()
+    def zoneTile = getChildDevice("${app.id}")
+	if (zoneTile) {
+	    zoneTile.setZoneDelta(getZoneAdjustment())
+    }
 }
 
 def zoneSetpointHandler(evt) {
@@ -305,9 +309,9 @@ def Double getZoneAdjustment() {
         	zoneAdj = settings.zoneAdjust
         }
     }
-    if (setting.inactiveAdjust && !isActive())
+    if (settings.inactiveAdjust && !isActive())
     {
-        zoneAdj -= setting.inactiveAdjust
+        zoneAdj -= settings.inactiveAdjust
     }
     // Then use the mode multipler
     zoneAdj = zoneAdj * state.modeMult 
