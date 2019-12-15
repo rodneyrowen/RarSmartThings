@@ -46,6 +46,12 @@ import groovy.transform.Field
     AUTO:  "auto"
 ]
 
+@Field final Map      ZONE_OCCUPANCY = [
+    INACTIVE: "unoccupied",
+    ACTIVE:   "occupied",
+    DISABLED: "disabled"
+]
+
 @Field final Map      MODE = [
     OFF:   "off",
     HEAT:  "heat",
@@ -121,7 +127,7 @@ metadata {
         capability "Sensor"
         capability "Actuator"
         capability "Health Check"
-		capability "Motion Sensor"
+//		capability "Motion Sensor"
         capability "Switch"
 
         capability "Thermostat"
@@ -129,6 +135,7 @@ metadata {
         capability "Refresh"
 
 		attribute "zone", "string"
+		attribute "occupancy", "string"
 		attribute "lastUpdate", "string"
 		attribute "zoneBase", "number"
 		attribute "zoneDelta", "number"
@@ -170,6 +177,7 @@ metadata {
         command "setZoneBase", ["number"]
         command "setZoneDelta", ["number"]
         command "setZoneTemporary", ["number"]
+        command "setZoneOccupancy", ["string"]
     }
     
     tiles(scale: 2) {
@@ -230,9 +238,10 @@ metadata {
             state "clearing", icon: "st.vents.vent-closed", backgroundColor: "#ffff33"
         }
 
-        valueTile("motion", "device.motion", width: 2, height: 2, decoration: "flat") {
-            state "active", label:'motion', icon: "st.motion.motion.active", backgroundColor: "#53a7c0"
-            state "inactive", label:'no motion', icon: "st.motion.motion.inactive", backgroundColor: "#ffffff"
+        valueTile("occupancy", "device.occupancy", width: 2, height: 2, decoration: "flat") {
+            state "occupied", label:'occupied', icon: "st.motion.motion.active", backgroundColor: "#53a7c0"
+            state "unoccupied", label:'empty', icon: "st.motion.motion.inactive", backgroundColor: "#ffffff"
+            state "disabled", label:'disabled', icon: "st.motion.motion.inactive", backgroundColor: "#ffffff"
 		}
 
 		valueTile("zonebase", "device.zoneBase", width: 2, height: 2, decoration: "flat") {
@@ -268,7 +277,7 @@ metadata {
 
         main("thermostatMulti")
         details(["thermostatMulti",
-            "zone", "ventMode", "motion",
+            "zone", "ventMode", "occupancy",
             "reset", "refresh","lastUpdate",
             "zonebase", "zonedelta", "zonetemporary"
         ])
@@ -347,6 +356,7 @@ def refresh() {
     sendEvent(name: "zoneTemporary", value: getZoneTemporary())
     setZoneBase(getZoneBase());
     setZoneDelta(getZoneDelta());
+    setZoneOccupancy(getZoneOccupancy());
     updateThermostatSetpoint()
 }
 
@@ -608,6 +618,15 @@ def setZoneDelta(Double newTemp) {
 
 def Double getZoneDelta() {
     return device.currentValue("zoneDelta") ?: 0
+}
+
+def setZoneOccupancy(String newState) {
+    log.debug "Executing 'setZoneOccupancy' ${newState}"
+    sendEvent(name:"occupancy", value: newState)
+}
+
+def String getZoneOccupancy() {
+    return device.currentValue("occupancy") ?: ZONE_OCCUPANCY.DISABLED
 }
 
 // changes the "room" temperature for the simulation

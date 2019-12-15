@@ -32,6 +32,12 @@ import groovy.transform.Field
     AUTO_OFF: "circulate",
 ]
 
+@Field final Map ZONE_OCCUPANCY = [
+    INACTIVE: "unoccupied",
+    ACTIVE:   "occupied",
+    DISABLED: "disabled"
+]
+
 definition(
     name: "Tstat Zone",
     namespace: "rodneyrowen",
@@ -60,9 +66,12 @@ preferences {
             input "zoneAdjust", "number", title: "Temperature Adjustment:", defaultValue: 0, multiple: false, required: true
 	        input "sModes", "mode", title: "Only when mode is", multiple: true, required: false
         }
-        section("Inactive Adjustments...") {
+        section("Room Occupancy...") {
             input "inactiveAdjust", "number", title: "Temperature Adjustment:", defaultValue: 5, multiple: false, required: true
+	        input "sOccupancyModes", "mode", title: "Only when mode is", multiple: true, required: false
             input "presence", "capability.presenceSensor", title: "Presence Devices", multiple: true, required: false
+  		    input "motionSensors", "capability.motionSensor", title: "Motion Sensors", multiple: true, required: false
+            input "inactiveDelay", "number", title: "No Motion delay:", defaultValue: 60, multiple: false, required: false
         }
         
     }
@@ -96,11 +105,11 @@ def initialize() {
     state.zoneControlMode = "active"
     state.zoneTriggerActive = false
     state.modeMult = 1
+    state.zoneOccupancy = ZONE_OCCUPANCY.ACTIVE
+    state.lastMotion = null
 
     subscribe(inTemp, "temperature", temperatureHandler)
 
-    //subscribe(motionSensors, "motion.inactive", inactiveHandler)
-    //subscribe(motionSensors, "motion.active", activeHandler)
     app.updateLabel("Zone-${settings.zoneName}") 
     def deviceID = "${app.id}"
     def zName = "Tstat-${settings.zoneName}"
@@ -115,6 +124,10 @@ def initialize() {
     subscribe(zoneTile, "zone", zoneActiveHandler)
     subscribe(zoneTile, "thermostatSetpoint", zoneSetpointHandler)
     subscribe(zoneTile, "thermostatFanMode", zoneVentModeHandler)
+    if (motionSensors) {
+    	subscribe(motionSensors, "motion.inactive", inactiveHandler)
+        subscribe(motionSensors, "motion.active", activeHandler)
+    }
 
     log.debug "Installed with settings: ${settings}"
 
@@ -126,6 +139,7 @@ def initialize() {
 def poll() {
 	// Periodic poller to read the temperature and adjust the vents
     temperatureHandler()
+    roomOccupancyHandler()
     processVents()
 }
 
@@ -157,6 +171,64 @@ def temperatureHandler(evt) {
 	if (zoneTile) {
 	    log.debug "Set Tile Temp to: ${average}"
 		zoneTile.setTemperature(average)
+   	}
+}
+
+def roomOccupancyHandler() {
+
+    def newOccupancy = ZONE_OCCUPANCY.ACTIVE
+    if (settings.sOccupancyModes) {
+        if (settings.sOccupancyModes.contains(location.mode)) {
+            newOccupancy = ZONE_OCCUPANCY.ACTIVE
+        } else {
+            newOccupancy = ZONE_OCCUPANCY.DISABLED
+        }
+    }
+
+    // Check the presence sensors to see if still active
+    if (newOccupancy != ZONE_OCCUPANCY.DISABLED) {
+        if (settings.presence) {
+            newOccupancy = ZONE_OCCUPANCY.INACTIVE
+            for (presensor in settings.presence) {
+                if (presensor.presence == "present") {
+                    newOccupancy = ZONE_OCCUPANCY.ACTIVE
+                    break;
+                }
+            }
+
+        }
+    }
+
+    if (newOccupancy == ZONE_OCCUPANCY.ACTIVE) {
+        if (settings.motionSensors) {
+            for (sensor in settings.motionSensors) {
+                if (sensor.motion == "active") {
+                    state.lastMotion = now()
+                    break;
+                }
+            }
+
+            if (state.lastMotion) {
+                // check elasped time
+                def elapsed = now() - state.lastMotion
+                log.trace "elapsed = $elapsed"
+                if (elapsed >= ((settings.inactiveDelay ?: 0) * 60000L) - 2000) {
+                    log.debug "Montion Timer expired - Back to inactive"
+                    state.lastMotion = null
+                    newOccupancy = ZONE_OCCUPANCY.INACTIVE
+                }
+            } else {
+                newOccupancy = ZONE_OCCUPANCY.INACTIVE
+            }
+        }
+    }
+    
+    state.zoneOccupancy = newOccupancy
+    // Do the work to determine if the room should be treated as occupied
+    def zoneTile = getChildDevice("${app.id}")
+	if (zoneTile) {
+	    log.debug "Set Tile Temp to: ${state.zoneOccupancye}"
+		zoneTile.setZoneOccupancy(state.zoneOccupancye)
    	}
 }
 
@@ -280,14 +352,14 @@ def getTemperature() {
 def Double getRoomDelta() {
     temperatureHandler()
     Double zoneDelta = 0
-    log.debug "getRoomDelta: ${state.setPoint} ${state.temperature} ${isActive()}"
+    //log.debug "getRoomDelta: ${state.setPoint} ${state.temperature} ${isActive()}"
     def zoneAdj = getZoneAdjustment()
     def localSetupPoint = 0  //state.zoneBase + zoneAdj + state.tempOffset
-    log.debug "getRoomDelta: Zone ${localSetupPoint} = Base ${state.zoneBase} Adj ${zoneAdj} Off ${state.tempOffset}"
+    //log.debug "getRoomDelta: Zone ${localSetupPoint} = Base ${state.zoneBase} Adj ${zoneAdj} Off ${state.tempOffset}"
     if (state.setPoint && state.temperature && isActive()) {
         def sp = state.setPoint as Double 
         zoneDelta = Math.round((sp - state.temperature)*10.0)/10.0
-        log.debug "getRoomDelta Value: ${zoneDelta}"
+        //log.debug "getRoomDelta Value: ${zoneDelta}"
         if (zoneDelta < -10) {
             zoneDelta = -10
         } else if (zoneDelta > 10) {
@@ -316,7 +388,7 @@ def Double getZoneAdjustment() {
     // Then use the mode multipler
     zoneAdj = zoneAdj * state.modeMult 
 
-    log.trace "Executing 'getZoneAdjustment' returned ${zoneAdj} with adj=${settings.zoneAdjust} and modes=${settings.sModes}"
+    //log.trace "Executing 'getZoneAdjustment' returned ${zoneAdj} with adj=${settings.zoneAdjust} and modes=${settings.sModes}"
 	return zoneAdj
 }
 
@@ -344,6 +416,14 @@ def Integer requiresHvac() {
 
 def activeHandler(evt){
     log.trace "active handler fired via [${evt.displayName}] UTC: ${evt.date.format("yyyy-MM-dd HH:mm:ss")}"
+    if (state.lastMotion == null) {
+        state.lastMotion = now()
+        // run proccessing loop
+        roomOccupancyHandler()
+        processVents()
+    } else {
+        state.lastMotion = now()
+    }
 }
 
 def inactiveHandler(evt){
