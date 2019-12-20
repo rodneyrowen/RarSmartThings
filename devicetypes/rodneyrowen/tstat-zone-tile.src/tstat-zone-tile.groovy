@@ -46,10 +46,12 @@ import groovy.transform.Field
     AUTO:  "auto"
 ]
 
-@Field final Map      ZONE_OCCUPANCY = [
-    INACTIVE: "unoccupied",
-    ACTIVE:   "occupied",
-    DISABLED: "disabled"
+@Field final Map ZONE_OCCUPANCY = [
+    VACANT:   "unoccupied",
+    OCCUPIED: "occupied",
+    IDLE:     "disabled",
+    ACTIVE:   "active",
+    INACTIVE: "inactive"
 ]
 
 @Field final Map      MODE = [
@@ -226,7 +228,7 @@ metadata {
         }
 
         valueTile("zone", "device.zone", width: 2, height: 2, decoration: "flat") {
-            state "active", label:'Active', icon: "st.motion.motion.active", action: "zoneInactive", backgroundColor: "#53a7c0"
+            state "active", label:'Active', icon: "st.motion.motion.active", action: "zoneAuto", backgroundColor: "#53a7c0"
             state "inactive", label:'Inactive', icon: "st.motion.motion.inactive", action: "zoneActive", backgroundColor: "#ffffff"
             state "auto", label:'Auto', icon: "st.motion.motion.active", action: "zoneInactive", backgroundColor: "#53a7c0"
 		}
@@ -239,9 +241,11 @@ metadata {
         }
 
         valueTile("occupancy", "device.occupancy", width: 2, height: 2, decoration: "flat") {
-            state "occupied", label:'occupied', icon: "st.motion.motion.active", backgroundColor: "#53a7c0"
-            state "unoccupied", label:'empty', icon: "st.motion.motion.inactive", backgroundColor: "#ffffff"
-            state "disabled", label:'disabled', icon: "st.motion.motion.inactive", backgroundColor: "#ffffff"
+            state "occupied", label:'Room\nOccupied', backgroundColor: "#ffffff"
+            state "unoccupied", label:'Room\nVacant', backgroundColor: "#ffffff"
+            state "active", label:'Room\nActive', backgroundColor: "#ffffff"
+            state "inactive", label:'Room\nInactive', backgroundColor: "#ffffff"
+            state "disabled", label:'Room\nPassive', backgroundColor: "#ffffff"
 		}
 
 		valueTile("zonebase", "device.zoneBase", width: 2, height: 2, decoration: "flat") {
