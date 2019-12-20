@@ -33,9 +33,16 @@ import groovy.transform.Field
 ]
 
 @Field final Map ZONE_OCCUPANCY = [
-    INACTIVE: "unoccupied",
-    ACTIVE:   "occupied",
-    DISABLED: "disabled"
+    VACANT:   "unoccupied",
+    OCCUPIED: "occupied",
+    IDLE:     "disabled",
+    ACTIVE:   "active",
+    INACTIVE: "inactive"
+]
+
+@Field final Map PRESENCE_STATE = [
+    PRESENT:     "present",
+    NOTPRESENT: "not present"
 ]
 
 definition(
@@ -128,6 +135,9 @@ def initialize() {
     	subscribe(motionSensors, "motion.inactive", inactiveHandler)
         subscribe(motionSensors, "motion.active", activeHandler)
     }
+    if (presence) {
+        subscribe(people, "presence", presenceHandler)
+    }
 
     log.debug "Installed with settings: ${settings}"
 
@@ -176,49 +186,58 @@ def temperatureHandler(evt) {
 
 def roomOccupancyHandler() {
 
-    def newOccupancy = ZONE_OCCUPANCY.ACTIVE
-    if (settings.sOccupancyModes) {
-        if (settings.sOccupancyModes.contains(location.mode)) {
-            newOccupancy = ZONE_OCCUPANCY.ACTIVE
-        } else {
-            newOccupancy = ZONE_OCCUPANCY.DISABLED
-        }
-    }
-
-    // Check the presence sensors to see if still active
-    if (newOccupancy != ZONE_OCCUPANCY.DISABLED) {
-        if (settings.presence) {
-            newOccupancy = ZONE_OCCUPANCY.INACTIVE
-            for (presensor in settings.presence) {
-                if (presensor.presence == "present") {
-                    newOccupancy = ZONE_OCCUPANCY.ACTIVE
-                    break;
-                }
-            }
-
-        }
-    }
-
-    if (newOccupancy == ZONE_OCCUPANCY.ACTIVE) {
-        if (settings.motionSensors) {
-            for (sensor in settings.motionSensors) {
-                if (sensor.motion == "active") {
-                    state.lastMotion = now()
-                    break;
-                }
-            }
-
-            if (state.lastMotion) {
-                // check elasped time
-                def elapsed = now() - state.lastMotion
-                log.trace "elapsed = $elapsed"
-                if (elapsed >= ((settings.inactiveDelay ?: 0) * 60000L) - 2000) {
-                    log.debug "Montion Timer expired - Back to inactive"
-                    state.lastMotion = null
-                    newOccupancy = ZONE_OCCUPANCY.INACTIVE
-                }
+    def newOccupancy = ZONE_OCCUPANCY.OCCUPIED
+    
+    if (state.zoneControlMode == "inactive") {
+        newOccupancy = ZONE_OCCUPANCY.INACTIVE
+    } else if (state.zoneControlMode == "active") {
+        newOccupancy = ZONE_OCCUPANCY.ACTIVE
+    } else {
+    	// mode is set to auto
+        if (settings.sOccupancyModes) {
+            if (settings.sOccupancyModes.contains(location.mode)) {
+                newOccupancy = ZONE_OCCUPANCY.OCCUPIED
             } else {
-                newOccupancy = ZONE_OCCUPANCY.INACTIVE
+                newOccupancy = ZONE_OCCUPANCY.IDLE
+            }
+        }
+
+        // Check the presence sensors to see if still active
+        if (newOccupancy != ZONE_OCCUPANCY.IDLE) {
+            if (settings.presence) {
+                newOccupancy = ZONE_OCCUPANCY.VACANT
+                for (presensor in settings.presence) {
+                    log.debug "presensor = ${presensor} ${presensor.currentValue("presence")}"
+                    if (presensor.currentValue("presence") == PRESENCE_STATE.PRESENT) {
+                        newOccupancy = ZONE_OCCUPANCY.OCCUPIED
+                        break;
+                    }
+                }
+
+            }
+        }
+
+        if (newOccupancy == ZONE_OCCUPANCY.OCCUPIED) {
+            if (settings.motionSensors) {
+                for (sensor in settings.motionSensors) {
+                    if (sensor.motion == "active") {
+                        state.lastMotion = now()
+                        break;
+                    }
+                }
+
+                if (state.lastMotion) {
+                    // check elasped time
+                    def elapsed = now() - state.lastMotion
+                    log.trace "elapsed = $elapsed"
+                    if (elapsed >= ((settings.inactiveDelay ?: 0) * 60000L) - 2000) {
+                        log.debug "Montion Timer expired - Back to vacant"
+                        state.lastMotion = null
+                        newOccupancy = ZONE_OCCUPANCY.VACANT
+                    }
+                } else {
+                    newOccupancy = ZONE_OCCUPANCY.VACANT
+                }
             }
         }
     }
@@ -227,8 +246,8 @@ def roomOccupancyHandler() {
     // Do the work to determine if the room should be treated as occupied
     def zoneTile = getChildDevice("${app.id}")
 	if (zoneTile) {
-	    log.debug "Set Tile Temp to: ${state.zoneOccupancye}"
-		zoneTile.setZoneOccupancy(state.zoneOccupancye)
+	    log.debug "Set Zone Occupany to: ${state.zoneOccupancy}"
+		zoneTile.setZoneOccupancy(state.zoneOccupancy)
    	}
 }
 
@@ -237,7 +256,7 @@ def processVents() {
         def zoneDelta = getRoomDelta()
         log.debug "processVents -> Mode: ${state.ventMode}: ${zoneDelta}=${state.setPoint}-${state.temperature}"
         if ((state.ventMode == VENT_STATE.AUTO_ON) || (state.ventMode == VENT_STATE.AUTO_OFF)) {
-            if (zoneDelta < 0) {
+            if (zoneDelta > 0) {
                 setVents(VENT_STATE.AUTO_ON)
             } else {
                 setVents(VENT_STATE.AUTO_OFF)
@@ -275,6 +294,7 @@ def processVents() {
 }
 
 def setVents(newState) {
+    log.debug "setVents: ${newState}"
     def zoneTile = getChildDevice("${app.id}")
 	if (newState != state.ventMode) {
     	switch (newState) {
@@ -291,15 +311,23 @@ def setVents(newState) {
                 }
                 break;
         	case VENT_STATE.ON:
+			    log.debug "setVents: open"
         		vents.setLevel(100)
                 break;
         	case VENT_STATE.OFF:
             default:
+			    log.debug "setVents: closed"
         		vents.setLevel(ventClosedLevel)
             	break;
        }
        state.ventMode = newState
     }
+}
+
+def presenceHandler(evt) {
+    log.debug "presence event tHandler: $evt.value"
+    roomOccupancyHandler()
+    processVents()
 }
 
 def zoneActiveHandler(evt) {
@@ -315,6 +343,7 @@ def setZoneActive(newMode) {
     state.zoneControlMode = newMode
     setThermostatMode(state.mode)
     setOperatingState(state.opState)
+    roomOccupancyHandler()
     processVents()
     def zoneTile = getChildDevice("${app.id}")
 	if (zoneTile) {
@@ -393,12 +422,20 @@ def Double getZoneAdjustment() {
 }
 
 def Integer isActive() {
-    //log.debug "Check Zone Active: ${state.zoneControlMode}"
-    if (state.zoneControlMode == "inactive") {
-        return 0
-    } else {
-        return 1
+    //log.debug "Check Zone Active: ${state.zoneOccupancy}"
+	def activeSystem = 0;
+    switch (state.zoneOccupancy) {
+        case ZONE_OCCUPANCY.VACANT:
+        case ZONE_OCCUPANCY.INACTIVE:
+        case ZONE_OCCUPANCY.IDLE:
+            activeSystem = 0;
+            break;
+        case ZONE_OCCUPANCY.OCCUPIED:
+        case ZONE_OCCUPANCY.ACTIVE:
+            activeSystem = 1
+            break;
     }
+    return activeSystem
 }
 
 def Integer isCooling() {
